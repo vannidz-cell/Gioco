@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Meteor AR — Difenditi dai meteoriti</title>
+  <style>
+    :root {
+      --accent: #38f0ff;
+      --danger: #ff3b52;
+      --gold: #ffcf3b;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #000; color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      user-select: none; -webkit-user-select: none; touch-action: none;
+    }
+    #stage { position: fixed; inset: 0; overflow: hidden; }
+    #camera {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      object-fit: cover; z-index: 0; background: #05060a;
+    }
+    /* Fallback starfield when camera is unavailable */
+    #starfield {
+      position: absolute; inset: 0; z-index: 0; display: none;
+      background: radial-gradient(ellipse at 50% 30%, #14213d 0%, #05060a 70%, #000 100%);
+    }
+    #game { position: absolute; inset: 0; z-index: 2; }
+    #vignette {
+      position: absolute; inset: 0; z-index: 1; pointer-events: none;
+      box-shadow: inset 0 0 200px 40px rgba(0,0,0,0.65);
+    }
+
+    /* HUD */
+    #hud {
+      position: absolute; top: 0; left: 0; right: 0; z-index: 3;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: calc(env(safe-area-inset-top, 0px) + 14px) 18px 0;
+      pointer-events: none; font-variant-numeric: tabular-nums;
+    }
+    .hud-box {
+      background: rgba(0,0,0,0.4); backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      border: 1px solid rgba(255,255,255,0.15); border-radius: 12px;
+      padding: 8px 14px; font-size: 15px; line-height: 1.35;
+    }
+    .hud-label { font-size: 10px; letter-spacing: 2px; opacity: 0.6; text-transform: uppercase; }
+    #score { font-size: 24px; font-weight: 700; color: var(--gold); }
+    #lives { font-size: 22px; letter-spacing: 2px; }
+    #wave { color: var(--accent); font-weight: 600; }
+
+    /* Overlays */
+    .overlay {
+      position: absolute; inset: 0; z-index: 5;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 28px;
+      background: radial-gradient(ellipse at center, rgba(5,8,20,0.82) 0%, rgba(0,0,0,0.92) 100%);
+      backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    }
+    .overlay.hidden { display: none; }
+    .title {
+      font-size: clamp(34px, 11vw, 64px); font-weight: 800; letter-spacing: 1px;
+      background: linear-gradient(180deg, #fff, var(--accent));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      text-shadow: 0 0 40px rgba(56,240,255,0.25); margin-bottom: 6px;
+    }
+    .subtitle { font-size: 15px; opacity: 0.8; max-width: 460px; line-height: 1.5; margin-bottom: 26px; }
+    .instructions {
+      text-align: left; max-width: 380px; margin: 0 auto 30px;
+      font-size: 14px; line-height: 1.7; opacity: 0.9;
+    }
+    .instructions li { list-style: none; margin: 4px 0; }
+    .instructions b { color: var(--accent); }
+    button.btn {
+      pointer-events: auto; cursor: pointer;
+      font-size: 20px; font-weight: 700; letter-spacing: 1px;
+      color: #04121a; background: linear-gradient(180deg, #7ff6ff, var(--accent));
+      border: none; border-radius: 50px; padding: 16px 48px;
+      box-shadow: 0 8px 30px rgba(56,240,255,0.4), inset 0 1px 0 rgba(255,255,255,0.6);
+      transition: transform 0.08s ease;
+    }
+    button.btn:active { transform: scale(0.95); }
+    .big-score { font-size: 20px; margin: 10px 0 4px; }
+    .big-score b { color: var(--gold); font-size: 40px; display: block; }
+    .hint { font-size: 12px; opacity: 0.55; margin-top: 22px; max-width: 420px; line-height: 1.5; }
+    #flash {
+      position: absolute; inset: 0; z-index: 4; pointer-events: none;
+      background: var(--danger); opacity: 0; transition: opacity 0.1s ease-out;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <video id="camera" playsinline muted autoplay></video>
+    <div id="starfield"></div>
+    <div id="vignette"></div>
+    <canvas id="game"></canvas>
+    <div id="flash"></div>
+
+    <div id="hud">
+      <div class="hud-box">
+        <div class="hud-label">Punti</div>
+        <div id="score">0</div>
+      </div>
+      <div class="hud-box" style="text-align:center">
+        <div class="hud-label">Ondata</div>
+        <div id="wave">1</div>
+      </div>
+      <div class="hud-box" style="text-align:right">
+        <div class="hud-label">Vite</div>
+        <div id="lives">❤️❤️❤️</div>
+      </div>
+    </div>
+
+    <!-- Start screen -->
+    <div id="startScreen" class="overlay">
+      <div class="title">METEOR&nbsp;AR</div>
+      <div class="subtitle">I meteoriti ti cadono addosso. Inquadrali col mirino e falli esplodere prima che ti colpiscano!</div>
+      <ul class="instructions">
+        <li>📷 <b>Consenti la fotocamera</b> per giocare in realtà aumentata</li>
+        <li>🎯 <b>Muovi il telefono</b> per puntare il mirino</li>
+        <li>👆 <b>Tocca lo schermo</b> per sparare al bersaglio</li>
+        <li>💥 Distruggi i meteoriti prima che diventino troppo grandi</li>
+      </ul>
+      <button id="startBtn" class="btn">GIOCA</button>
+      <div class="hint">Serve una connessione HTTPS per usare la fotocamera. Se neghi il permesso, giochi comunque con uno sfondo spaziale.</div>
+    </div>
+
+    <!-- Game over screen -->
+    <div id="overScreen" class="overlay hidden">
+      <div class="title" style="background:linear-gradient(180deg,#fff,var(--danger));-webkit-background-clip:text;background-clip:text;">GAME&nbsp;OVER</div>
+      <div class="big-score">Punteggio<b id="finalScore">0</b></div>
+      <div class="subtitle" id="overSub" style="margin-top:8px">Ci sei quasi arrivato!</div>
+      <button id="restartBtn" class="btn">RIGIOCA</button>
+    </div>
+  </div>
+
+  <script>
+  (function () {
+    "use strict";
+
+    // ---------- Elementi DOM ----------
+    const video = document.getElementById("camera");
+    const starfield = document.getElementById("starfield");
+    const canvas = document.getElementById("game");
+    const ctx = canvas.getContext("2d");
+    const scoreEl = document.getElementById("score");
+    const livesEl = document.getElementById("lives");
+    const waveEl = document.getElementById("wave");
+    const flashEl = document.getElementById("flash");
+    const startScreen = document.getElementById("startScreen");
+    const overScreen = document.getElementById("overScreen");
+    const startBtn = document.getElementById("startBtn");
+    const restartBtn = document.getElementById("restartBtn");
+    const finalScoreEl = document.getElementById("finalScore");
+    const overSub = document.getElementById("overSub");
+
+    // ---------- Dimensionamento canvas ----------
+    let W = 0, H = 0, DPR = 1;
+    function resize() {
+      DPR = Math.min(window.devicePixelRatio || 1, 2);
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width = Math.round(W * DPR);
+      canvas.height = Math.round(H * DPR);
+      canvas.style.width = W + "px";
+      canvas.style.height = H + "px";
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    window.addEventListener("resize", resize);
+    window.addEventListener("orientationchange", () => setTimeout(resize, 300));
+    resize();
+
+    // ---------- Audio (WebAudio, suoni generati) ----------
+    let audioCtx = null;
+    function initAudio() {
+      if (audioCtx) return;
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { audioCtx = null; }
+    }
+    function beep(type, freqStart, freqEnd, dur, vol) {
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freqStart, t);
+      osc.frequency.exponentialRampToValueAtTime(Math.max(1, freqEnd), t + dur);
+      gain.gain.setValueAtTime(vol, t);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(t); osc.stop(t + dur);
+    }
+    function noiseBurst(dur, vol) {
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      const buffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * dur), audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+      const src = audioCtx.createBufferSource(); src.buffer = buffer;
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(vol, t);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = "lowpass"; filter.frequency.value = 1200;
+      src.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+      src.start(t);
+    }
+    const sfx = {
+      shoot: () => beep("square", 880, 180, 0.12, 0.12),
+      explode: () => { noiseBurst(0.4, 0.35); beep("sawtooth", 220, 40, 0.4, 0.18); },
+      hit: () => { noiseBurst(0.5, 0.5); beep("sawtooth", 120, 30, 0.5, 0.3); },
+      over: () => beep("sine", 400, 60, 1.0, 0.25),
+    };
+
+    // ---------- Stato di gioco ----------
+    const STATE = { MENU: 0, PLAYING: 1, OVER: 2 };
+    let state = STATE.MENU;
+    let meteors = [];
+    let particles = [];
+    let shots = [];
+    let score = 0;
+    let lives = 3;
+    let wave = 1;
+    let spawnTimer = 0;
+    let spawnInterval = 1.6;   // secondi tra i meteoriti
+    let waveTimer = 0;
+    let lastTime = 0;
+
+    function reset() {
+      meteors = []; particles = []; shots = [];
+      score = 0; lives = 3; wave = 1;
+      spawnTimer = 0; spawnInterval = 1.6; waveTimer = 0;
+      updateHUD();
+    }
+
+    function updateHUD() {
+      scoreEl.textContent = score;
+      waveEl.textContent = wave;
+      livesEl.textContent = lives > 0 ? "❤️".repeat(lives) : "💀";
+    }
+
+    // ---------- Meteoriti ----------
+    // Ogni meteorite parte piccolo (lontano) e cresce (si avvicina).
+    // Quando growth >= 1 raggiunge il giocatore e provoca danno.
+    const METEOR_COLORS = ["#8a7a6a", "#9a8574", "#6f6355", "#a58b6f"];
+    function spawnMeteor() {
+      const margin = 0.15;
+      const tx = W * (margin + Math.random() * (1 - 2 * margin));
+      const ty = H * (margin + Math.random() * (1 - 2 * margin));
+      // velocità di avvicinamento cresce con l'ondata
+      const speed = (0.05 + Math.random() * 0.05) * (1 + (wave - 1) * 0.12);
+      const maxR = 42 + Math.random() * 34;
+      const craters = [];
+      const n = 3 + Math.floor(Math.random() * 4);
+      for (let i = 0; i < n; i++) {
+        craters.push({
+          a: Math.random() * Math.PI * 2,
+          d: 0.2 + Math.random() * 0.55,
+          r: 0.1 + Math.random() * 0.18,
+        });
+      }
+      meteors.push({
+        x: tx, y: ty,
+        growth: 0.001,     // 0..1
+        speed: speed,
+        maxR: maxR,
+        rot: Math.random() * Math.PI * 2,
+        spin: (Math.random() - 0.5) * 1.5,
+        wobbleX: (Math.random() - 0.5) * 40,
+        wobbleY: (Math.random() - 0.5) * 40,
+        color: METEOR_COLORS[Math.floor(Math.random() * METEOR_COLORS.length)],
+        craters: craters,
+        alive: true,
+      });
+    }
+
+    function meteorRadius(m) { return 4 + m.growth * m.maxR; }
+    function meteorPos(m) {
+      return { x: m.x + m.wobbleX * m.growth, y: m.y + m.wobbleY * m.growth };
+    }
+
+    // ---------- Esplosioni / particelle ----------
+    function explode(x, y, color, big) {
+      const count = big ? 34 : 22;
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = (big ? 120 : 80) * (0.3 + Math.random());
+        particles.push({
+          x, y,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+          life: 0.5 + Math.random() * 0.5, age: 0,
+          r: 2 + Math.random() * 4,
+          color: Math.random() < 0.5 ? "#ffcf3b" : (Math.random() < 0.5 ? "#ff7b3b" : color),
+        });
+      }
+      // onda d'urto
+      particles.push({ shock: true, x, y, r: 6, maxR: big ? 130 : 90, life: 0.4, age: 0 });
+    }
+
+    // ---------- Mirino ----------
+    let crosshairLocked = false;
+    function drawCrosshair() {
+      const cx = W / 2, cy = H / 2;
+      const size = 34;
+      ctx.save();
+      ctx.translate(cx, cy);
+      const col = crosshairLocked ? "#ff3b52" : "rgba(56,240,255,0.9)";
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = col; ctx.shadowBlur = crosshairLocked ? 16 : 8;
+      ctx.beginPath(); ctx.arc(0, 0, size, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(0, 0, size * 0.4, 0, Math.PI * 2); ctx.stroke();
+      const g = size + 12, s = size - 8;
+      ctx.beginPath();
+      ctx.moveTo(0, -g); ctx.lineTo(0, -s);
+      ctx.moveTo(0, g); ctx.lineTo(0, s);
+      ctx.moveTo(-g, 0); ctx.lineTo(-s, 0);
+      ctx.moveTo(g, 0); ctx.lineTo(s, 0);
+      ctx.stroke();
+      if (crosshairLocked) {
+        ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    // ---------- Sparo ----------
+    function fireAt(px, py) {
+      if (state !== STATE.PLAYING) return;
+      sfx.shoot();
+      shots.push({ x: W / 2, y: H + 20, tx: px, ty: py, age: 0, life: 0.18 });
+
+      // Trova il meteorite colpito: quello più vicino al punto di tocco entro il suo raggio
+      let hit = null, hitDist = Infinity;
+      for (const m of meteors) {
+        if (!m.alive) continue;
+        const p = meteorPos(m);
+        const r = meteorRadius(m);
+        const d = Math.hypot(p.x - px, p.y - py);
+        if (d <= r + 22 && d < hitDist) { hit = m; hitDist = d; }
+      }
+      if (hit) {
+        hit.alive = false;
+        const p = meteorPos(hit);
+        explode(p.x, p.y, hit.color, meteorRadius(hit) > 40);
+        sfx.explode();
+        const gained = 10 + Math.floor(meteorRadius(hit));
+        score += gained;
+        updateHUD();
+        floaters.push({ x: p.x, y: p.y, text: "+" + gained, age: 0, life: 0.9 });
+      }
+    }
+
+    // Numeri "+punti" che salgono
+    let floaters = [];
+
+    // ---------- Danno ----------
+    function takeDamage() {
+      lives--;
+      updateHUD();
+      sfx.hit();
+      flashEl.style.opacity = "0.55";
+      setTimeout(() => { flashEl.style.opacity = "0"; }, 120);
+      if (navigator.vibrate) navigator.vibrate(200);
+      if (lives <= 0) gameOver();
+    }
+
+    function gameOver() {
+      state = STATE.OVER;
+      sfx.over();
+      finalScoreEl.textContent = score;
+      overSub.textContent = score >= 500 ? "Difensore leggendario! 🏆"
+        : score >= 200 ? "Ottima mira! 🎯"
+        : "Ci sei quasi arrivato!";
+      overScreen.classList.remove("hidden");
+    }
+
+    // ---------- Loop principale ----------
+    function update(dt) {
+      if (state !== STATE.PLAYING) return;
+
+      // Progressione difficoltà
+      waveTimer += dt;
+      if (waveTimer > 18) {
+        waveTimer = 0; wave++;
+        spawnInterval = Math.max(0.55, spawnInterval * 0.85);
+        updateHUD();
+      }
+
+      // Spawn
+      spawnTimer += dt;
+      if (spawnTimer >= spawnInterval) {
+        spawnTimer = 0;
+        spawnMeteor();
+        if (wave >= 4 && Math.random() < 0.35) spawnMeteor();
+      }
+
+      // Meteoriti
+      for (const m of meteors) {
+        if (!m.alive) continue;
+        m.growth += m.speed * dt;
+        m.rot += m.spin * dt;
+        if (m.growth >= 1) {
+          m.alive = false;
+          const p = meteorPos(m);
+          explode(p.x, p.y, "#ff3b52", true);
+          takeDamage();
+        }
+      }
+      meteors = meteors.filter(m => m.alive);
+
+      // Determina lock del mirino (meteorite sotto il centro)
+      crosshairLocked = false;
+      const cx = W / 2, cy = H / 2;
+      for (const m of meteors) {
+        const p = meteorPos(m);
+        if (Math.hypot(p.x - cx, p.y - cy) <= meteorRadius(m) + 30) { crosshairLocked = true; break; }
+      }
+
+      // Particelle
+      for (const pt of particles) {
+        pt.age += dt;
+        if (pt.shock) { pt.r = 6 + (pt.maxR - 6) * (pt.age / pt.life); continue; }
+        pt.x += pt.vx * dt; pt.y += pt.vy * dt;
+        pt.vy += 60 * dt; // leggera gravità
+        pt.vx *= 0.98; pt.vy *= 0.98;
+      }
+      particles = particles.filter(p => p.age < p.life);
+
+      // Spari
+      for (const s of shots) s.age += dt;
+      shots = shots.filter(s => s.age < s.life);
+
+      // Floaters
+      for (const f of floaters) { f.age += dt; f.y -= 40 * dt; }
+      floaters = floaters.filter(f => f.age < f.life);
+    }
+
+    function drawMeteor(m) {
+      const p = meteorPos(m);
+      const r = meteorRadius(m);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+
+      // alone di ingresso in atmosfera (più forte da vicino)
+      const halo = ctx.createRadialGradient(0, 0, r * 0.6, 0, 0, r * 2.2);
+      halo.addColorStop(0, "rgba(255,120,40," + (0.25 * m.growth) + ")");
+      halo.addColorStop(1, "rgba(255,120,40,0)");
+      ctx.fillStyle = halo;
+      ctx.beginPath(); ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2); ctx.fill();
+
+      ctx.rotate(m.rot);
+
+      // corpo roccioso
+      const body = ctx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.2, 0, 0, r);
+      body.addColorStop(0, "#c9b8a3");
+      body.addColorStop(0.5, m.color);
+      body.addColorStop(1, "#2f2820");
+      ctx.fillStyle = body;
+      ctx.beginPath();
+      // contorno leggermente irregolare
+      const pts = 12;
+      for (let i = 0; i <= pts; i++) {
+        const a = (i / pts) * Math.PI * 2;
+        const rr = r * (0.9 + 0.12 * Math.sin(a * 3 + m.rot * 2));
+        const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath(); ctx.fill();
+
+      // crateri
+      ctx.fillStyle = "rgba(0,0,0,0.22)";
+      for (const c of m.craters) {
+        const cxp = Math.cos(c.a) * c.d * r;
+        const cyp = Math.sin(c.a) * c.d * r;
+        ctx.beginPath(); ctx.arc(cxp, cyp, c.r * r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+
+      // scia luminosa quando è vicino (pericolo)
+      if (m.growth > 0.55) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,59,82," + ((m.growth - 0.55) / 0.45) + ")";
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 8]);
+        ctx.beginPath(); ctx.arc(p.x, p.y, r + 8, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    function render() {
+      ctx.clearRect(0, 0, W, H);
+
+      // meteoriti (i più lontani/piccoli dietro)
+      const sorted = meteors.slice().sort((a, b) => a.growth - b.growth);
+      for (const m of sorted) drawMeteor(m);
+
+      // spari (laser dal basso verso il bersaglio)
+      for (const s of shots) {
+        const t = s.age / s.life;
+        const x = s.x + (s.tx - s.x) * Math.min(1, t * 1.4);
+        const y = s.y + (s.ty - s.y) * Math.min(1, t * 1.4);
+        ctx.save();
+        ctx.strokeStyle = "rgba(56,240,255," + (1 - t) + ")";
+        ctx.lineWidth = 4; ctx.lineCap = "round";
+        ctx.shadowColor = "#38f0ff"; ctx.shadowBlur = 12;
+        ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(x, y); ctx.stroke();
+        ctx.restore();
+      }
+
+      // particelle
+      for (const pt of particles) {
+        if (pt.shock) {
+          const t = pt.age / pt.life;
+          ctx.save();
+          ctx.strokeStyle = "rgba(255,207,59," + (1 - t) + ")";
+          ctx.lineWidth = 3 * (1 - t);
+          ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2); ctx.stroke();
+          ctx.restore();
+          continue;
+        }
+        const t = pt.age / pt.life;
+        ctx.globalAlpha = 1 - t;
+        ctx.fillStyle = pt.color;
+        ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r * (1 - t * 0.5), 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+
+      // floaters
+      for (const f of floaters) {
+        const t = f.age / f.life;
+        ctx.save();
+        ctx.globalAlpha = 1 - t;
+        ctx.fillStyle = "#ffcf3b";
+        ctx.font = "bold 22px -apple-system, sans-serif";
+        ctx.textAlign = "center";
+        ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 4;
+        ctx.fillText(f.text, f.x, f.y);
+        ctx.restore();
+      }
+
+      // mirino
+      if (state === STATE.PLAYING) drawCrosshair();
+    }
+
+    function loop(now) {
+      const dt = Math.min(0.05, (now - lastTime) / 1000 || 0);
+      lastTime = now;
+      update(dt);
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    // ---------- Fotocamera ----------
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } }, audio: false
+        });
+        video.srcObject = stream;
+        await video.play().catch(() => {});
+      } catch (e) {
+        // Permesso negato o non disponibile → sfondo stellato
+        video.style.display = "none";
+        starfield.style.display = "block";
+      }
+    }
+
+    // ---------- Input ----------
+    function handleTap(clientX, clientY) {
+      if (state === STATE.PLAYING) fireAt(clientX, clientY);
+    }
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      for (const t of e.changedTouches) handleTap(t.clientX, t.clientY);
+    }, { passive: false });
+    canvas.addEventListener("mousedown", (e) => handleTap(e.clientX, e.clientY));
+
+    // ---------- Avvio partita ----------
+    async function startGame() {
+      initAudio();
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      await startCamera();
+      reset();
+      startScreen.classList.add("hidden");
+      overScreen.classList.add("hidden");
+      state = STATE.PLAYING;
+    }
+    startBtn.addEventListener("click", startGame);
+    restartBtn.addEventListener("click", async () => {
+      if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+      reset();
+      overScreen.classList.add("hidden");
+      state = STATE.PLAYING;
+    });
+
+    requestAnimationFrame(loop);
+  })();
+  </script>
+</body>
+</html>

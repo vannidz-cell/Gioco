@@ -1,0 +1,12 @@
+# dipendenze / build
+node_modules/
+dist/
+
+# certificati locali per test HTTPS
+*.pem
+key.pem
+cert.pem
+
+# sistema
+.DS_Store
+Thumbs.db
