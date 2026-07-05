@@ -174,7 +174,7 @@
 
     // ---------- Canvas / prospettiva ----------
     let W = 0, H = 0, DPR = 1, PX_PER_DEG = 8;
-    const H_FOV = 60; // gradi visibili in orizzontale
+    const H_FOV = 32; // gradi visibili in orizzontale (più basso = più sensibile al movimento)
     function resize() {
       DPR = Math.min(window.devicePixelRatio || 1, 2);
       W = window.innerWidth; H = window.innerHeight;
@@ -297,9 +297,9 @@
     // ---------- Meteoriti (ancorati nello spazio: az/el in gradi) ----------
     const METEOR_COLORS = ["#8a7a6a", "#9a8574", "#6f6355", "#a58b6f"];
     function spawnMeteor() {
-      // compare in una direzione attorno a dove stai guardando, così è raggiungibile girando
-      const az = yaw + (Math.random() < 0.5 ? -1 : 1) * (14 + Math.random() * 34); // ±14..48°
-      const el = pitch + (Math.random() * 2 - 1) * 26;                              // ±26°
+      // compare vicino a dove stai guardando, così basta un piccolo movimento per centrarlo
+      const az = yaw + (Math.random() < 0.5 ? -1 : 1) * (5 + Math.random() * 16); // ±5..21°
+      const el = pitch + (Math.random() * 2 - 1) * 14;                            // ±14°
       const speed = (0.05 + Math.random() * 0.05) * (1 + (wave - 1) * 0.12);
       const maxR = 42 + Math.random() * 34;
       const craters = [];
@@ -572,8 +572,8 @@
       const dx = x - lx, dy = y - ly; lx = x; ly = y;
       if (Math.abs(x - sx) + Math.abs(y - sy) > 10) ptrMoved = true;
       if (!gotOrientation) { // nessun sensore: si mira trascinando
-        targetYaw = norm180(targetYaw + dx * 0.2);
-        targetPitch = clamp(targetPitch - dy * 0.2, -55, 55);
+        targetYaw = norm180(targetYaw + dx * 0.12);
+        targetPitch = clamp(targetPitch - dy * 0.12, -55, 55);
       }
     }
     function onUp() {
