@@ -2,6 +2,10 @@
 
 Un gioco in **realtà aumentata** che gira nel browser del telefono: inquadri la stanza con la fotocamera, i meteoriti ti "cadono addosso" e li fai esplodere con il mirino!
 
+## ▶️ Gioca ora
+
+**https://vannidz-cell.github.io/Gioco/** — apri dal telefono e consenti la fotocamera.
+
 ## 🎮 Come si gioca
 
 1. Apri il gioco sul telefono e tocca **GIOCA**
