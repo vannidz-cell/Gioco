@@ -19,12 +19,12 @@ Se neghi il permesso alla fotocamera, il gioco parte comunque con uno sfondo spa
 
 ## 📱 Provalo sul telefono
 
-La fotocamera funziona **solo su HTTPS**. Il modo più semplice è pubblicarlo su **GitHub Pages**:
+La fotocamera funziona **solo su HTTPS**. Il modo più semplice è pubblicarlo su **GitHub Pages** (il repository deve essere **pubblico** sui piani gratuiti):
 
 1. Vai su **Settings → Pages** del repository
-2. In *Build and deployment* scegli **GitHub Actions** come sorgente
-3. Fai un push: il workflow in `.github/workflows/pages.yml` pubblica il gioco
-4. L'URL sarà tipo `https://<utente>.github.io/Gioco/` — aprilo dal telefono
+2. In *Build and deployment → Source* scegli **Deploy from a branch**
+3. Seleziona **Branch: `main`** e cartella **`/ (root)`**, poi **Save**
+4. Dopo ~1 minuto l'URL `https://<utente>.github.io/Gioco/` è online — aprilo dal telefono
 
 ### Provarlo in locale (dallo stesso Wi-Fi)
 
