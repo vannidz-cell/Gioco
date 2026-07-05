@@ -9,11 +9,7 @@
   <title>Meteor AR — Difenditi dai meteoriti</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌠</text></svg>" />
   <style>
-    :root {
-      --accent: #38f0ff;
-      --danger: #ff3b52;
-      --gold: #ffcf3b;
-    }
+    :root { --accent: #38f0ff; --danger: #ff3b52; --gold: #ffcf3b; --ufo: #b76bff; }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
       width: 100%; height: 100%; overflow: hidden;
@@ -130,16 +126,15 @@
     <!-- Start screen -->
     <div id="startScreen" class="overlay">
       <div class="title">METEOR&nbsp;AR</div>
-      <div class="subtitle">I meteoriti ti cadono addosso da ogni direzione. Punta muovendo il telefono e falli esplodere prima che ti colpiscano!</div>
+      <div class="subtitle">I meteoriti ti cadono addosso. Colpiscili al volo prima che ti raggiungano… e attento all'UFO!</div>
       <ul class="instructions">
-        <li>📷 <b>Consenti fotocamera e movimento</b> quando richiesto</li>
-        <li>🔄 <b>Muovi/ruota il telefono</b> per spostare la visuale</li>
-        <li>🎯 <b>Centra il meteorite nel mirino</b> (diventa rosso)</li>
-        <li>👆 <b>Tocca lo schermo</b> per sparare</li>
-        <li>➤ Le <b>frecce</b> indicano i meteoriti fuori campo</li>
+        <li>📷 <b>Consenti la fotocamera</b> per giocare in realtà aumentata</li>
+        <li>👆 <b>Tocca un meteorite</b> per farlo esplodere</li>
+        <li>💥 Distruggili prima che diventino troppo grandi</li>
+        <li>🛸 <b>L'UFO</b> compare e ti attacca: toccalo più volte per abbatterlo</li>
       </ul>
       <button id="startBtn" class="btn">GIOCA</button>
-      <div class="hint">Serve HTTPS per fotocamera e sensori. Su iPhone apparirà una richiesta per l'accesso al movimento: tocca “Consenti”.</div>
+      <div class="hint">Serve una connessione HTTPS per usare la fotocamera. Se neghi il permesso, giochi comunque con uno sfondo spaziale.</div>
     </div>
 
     <!-- Game over screen -->
@@ -172,23 +167,19 @@
     const finalScoreEl = document.getElementById("finalScore");
     const overSub = document.getElementById("overSub");
 
-    // ---------- Canvas / prospettiva ----------
-    let W = 0, H = 0, DPR = 1, PX_PER_DEG = 8;
-    const H_FOV = 32; // gradi visibili in orizzontale (più basso = più sensibile al movimento)
+    // ---------- Canvas ----------
+    let W = 0, H = 0, DPR = 1;
     function resize() {
       DPR = Math.min(window.devicePixelRatio || 1, 2);
       W = window.innerWidth; H = window.innerHeight;
       canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
       canvas.style.width = W + "px"; canvas.style.height = H + "px";
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-      PX_PER_DEG = W / H_FOV;
     }
     window.addEventListener("resize", resize);
     window.addEventListener("orientationchange", () => setTimeout(resize, 300));
     resize();
 
-    // ---------- Utility angoli ----------
-    function norm180(d) { d = ((d + 180) % 360 + 360) % 360 - 180; return d; }
     function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
 
     // ---------- Audio ----------
@@ -226,61 +217,32 @@
       src.start(t);
     }
     const sfx = {
-      shoot: () => beep("square", 880, 180, 0.12, 0.12),
+      shoot: () => beep("square", 880, 180, 0.10, 0.10),
       explode: () => { noiseBurst(0.4, 0.35); beep("sawtooth", 220, 40, 0.4, 0.18); },
-      miss: () => beep("square", 300, 160, 0.08, 0.06),
+      miss: () => beep("square", 260, 150, 0.07, 0.05),
       hit: () => { noiseBurst(0.5, 0.5); beep("sawtooth", 120, 30, 0.5, 0.3); },
+      ufoAppear: () => { beep("sine", 500, 900, 0.5, 0.10); beep("sine", 700, 1100, 0.5, 0.08); },
+      ufoShoot: () => beep("sawtooth", 620, 140, 0.28, 0.14),
+      ufoTap: () => beep("square", 500, 700, 0.06, 0.10),
+      ufoDead: () => { noiseBurst(0.6, 0.4); beep("sawtooth", 300, 30, 0.7, 0.22); },
       over: () => beep("sine", 400, 60, 1.0, 0.25),
     };
 
-    // ---------- Orientamento del dispositivo ----------
-    // yaw = rotazione orizzontale (girarsi), pitch = inclinazione su/giù.
-    let yaw = 0, pitch = 0;             // visuale corrente (gradi), con smoothing
-    let targetYaw = 0, targetPitch = 0; // valori grezzi dai sensori/drag
-    let baseAlpha = null;               // calibrazione: la direzione iniziale = 0
-    let gotOrientation = false;         // true appena arrivano dati dai sensori
-
-    function handleOrientation(e) {
-      if (e.alpha == null && e.beta == null) return;
-      gotOrientation = true;
-      const a = e.alpha || 0, b = e.beta || 0;
-      if (baseAlpha === null) baseAlpha = a;
-      // girando a destra alpha diminuisce: invertiamo così destra = yaw positivo
-      targetYaw = norm180(baseAlpha - a);
-      // beta ~90 col telefono verticale; 0 = orizzonte
-      targetPitch = clamp(b - 90, -55, 55);
-    }
-    async function enableOrientation() {
-      const DOE = window.DeviceOrientationEvent;
-      if (!DOE) return;
-      if (typeof DOE.requestPermission === "function") {
-        // iOS 13+: richiede permesso da un gesto utente
-        try {
-          const res = await DOE.requestPermission();
-          if (res === "granted") window.addEventListener("deviceorientation", handleOrientation, true);
-        } catch (e) { /* negato: si userà il trascinamento */ }
-      } else {
-        window.addEventListener("deviceorientation", handleOrientation, true);
-      }
-    }
-
-    // ---------- Stato di gioco ----------
+    // ---------- Stato ----------
     const STATE = { MENU: 0, PLAYING: 1, OVER: 2 };
     let state = STATE.MENU;
-    let meteors = [], particles = [], shots = [], floaters = [];
+    let meteors = [], particles = [], shots = [], floaters = [], bolts = [];
+    let ufo = null, ufoCooldown = 0;
     let score = 0, lives = 3, wave = 1;
-    let spawnTimer = 0, spawnInterval = 1.7, waveTimer = 0, lastTime = 0;
-    let crosshairLocked = false;
-    const LOCK_RADIUS = 70; // px: distanza dal centro entro cui il mirino "aggancia"
+    let spawnTimer = 0, spawnInterval = 1.6, waveTimer = 0, lastTime = 0, elapsed = 0;
 
     function reset() {
-      meteors = []; particles = []; shots = []; floaters = [];
+      meteors = []; particles = []; shots = []; floaters = []; bolts = [];
+      ufo = null; ufoCooldown = 8;
       score = 0; lives = 3; wave = 1;
-      spawnTimer = 0; spawnInterval = 1.7; waveTimer = 0;
-      // ricalibra la visuale sulla direzione attuale
-      baseAlpha = null; targetYaw = 0; targetPitch = 0; yaw = 0; pitch = 0;
+      spawnTimer = 0; spawnInterval = 1.6; waveTimer = 0;
       updateHUD();
-      showTip("Muovi il telefono per mirare, poi tocca per sparare", 3500);
+      showTip("Tocca i meteoriti per farli esplodere!", 3000);
     }
     function updateHUD() {
       scoreEl.textContent = score;
@@ -294,12 +256,12 @@
       tipTimer = setTimeout(() => tipEl.classList.remove("show"), ms || 2500);
     }
 
-    // ---------- Meteoriti (ancorati nello spazio: az/el in gradi) ----------
+    // ---------- Meteoriti (posizione fissa sullo schermo, crescono sul posto) ----------
     const METEOR_COLORS = ["#8a7a6a", "#9a8574", "#6f6355", "#a58b6f"];
     function spawnMeteor() {
-      // compare vicino a dove stai guardando, così basta un piccolo movimento per centrarlo
-      const az = yaw + (Math.random() < 0.5 ? -1 : 1) * (5 + Math.random() * 16); // ±5..21°
-      const el = pitch + (Math.random() * 2 - 1) * 14;                            // ±14°
+      const margin = 0.15;
+      const x = W * (margin + Math.random() * (1 - 2 * margin));
+      const y = H * (margin + Math.random() * (1 - 2 * margin));
       const speed = (0.05 + Math.random() * 0.05) * (1 + (wave - 1) * 0.12);
       const maxR = 42 + Math.random() * 34;
       const craters = [];
@@ -307,22 +269,73 @@
       for (let i = 0; i < n; i++)
         craters.push({ a: Math.random() * Math.PI * 2, d: 0.2 + Math.random() * 0.55, r: 0.1 + Math.random() * 0.18 });
       meteors.push({
-        az: az, el: el, growth: 0.001, speed: speed, maxR: maxR,
+        x, y, growth: 0.001, speed, maxR,
         rot: Math.random() * Math.PI * 2, spin: (Math.random() - 0.5) * 1.5,
+        wobbleX: (Math.random() - 0.5) * 36, wobbleY: (Math.random() - 0.5) * 36,
         color: METEOR_COLORS[(Math.random() * METEOR_COLORS.length) | 0],
-        craters: craters, alive: true,
+        craters, alive: true,
       });
     }
     function meteorRadius(m) { return 4 + m.growth * m.maxR; }
-    // posizione sullo schermo in base alla differenza tra la sua direzione e la visuale
-    function meteorScreen(m) {
-      const dAz = norm180(m.az - yaw);
-      const dEl = m.el - pitch;
-      return {
-        x: W / 2 + dAz * PX_PER_DEG,
-        y: H / 2 - dEl * PX_PER_DEG,
-        dAz: dAz, dEl: dEl,
+    function meteorPos(m) { return { x: m.x + m.wobbleX * m.growth, y: m.y + m.wobbleY * m.growth }; }
+
+    // ---------- UFO ----------
+    function spawnUfo() {
+      const fromLeft = Math.random() < 0.5;
+      const y = H * (0.14 + Math.random() * 0.24);
+      ufo = {
+        x: fromLeft ? -70 : W + 70, y,
+        tx: W * (0.25 + Math.random() * 0.5), ty: y,
+        rx: 40, ry: 18, hp: 3, maxHp: 3,
+        wpTimer: 0, fireCd: 2.8, charging: 0, hitFx: 0, alive: true,
       };
+      sfx.ufoAppear();
+      showTip("🛸 Un UFO! Toccalo più volte per abbatterlo", 2800);
+    }
+    function updateUfo(dt) {
+      if (!ufo) {
+        if (state === STATE.PLAYING && wave >= 2) {
+          ufoCooldown -= dt;
+          if (ufoCooldown <= 0) { ufoCooldown = 14 + Math.random() * 10; if (Math.random() < 0.7) spawnUfo(); }
+        }
+        return;
+      }
+      // movimento casuale: cambia meta ogni tanto
+      ufo.wpTimer -= dt;
+      if (ufo.wpTimer <= 0) {
+        ufo.wpTimer = 0.9 + Math.random() * 1.4;
+        ufo.tx = W * (0.12 + Math.random() * 0.76);
+        ufo.ty = H * (0.10 + Math.random() * 0.34);
+      }
+      ufo.x += (ufo.tx - ufo.x) * Math.min(1, dt * 1.8);
+      ufo.y += (ufo.ty - ufo.y) * Math.min(1, dt * 1.8);
+      ufo.y += Math.sin(elapsed * 3) * 0.4; // ondeggiamento
+      if (ufo.hitFx > 0) ufo.hitFx -= dt;
+
+      // attacco: carica poi spara verso il giocatore
+      if (ufo.charging > 0) {
+        ufo.charging -= dt;
+        if (ufo.charging <= 0) { fireBolt(ufo.x, ufo.y); ufo.fireCd = 3.2 + Math.random() * 2; }
+      } else {
+        ufo.fireCd -= dt;
+        if (ufo.fireCd <= 0) ufo.charging = 0.9;
+      }
+    }
+    function hitUfo() {
+      ufo.hp--; ufo.hitFx = 0.18; sfx.ufoTap();
+      floaters.push({ x: ufo.x, y: ufo.y - ufo.ry - 10, text: ufo.hp > 0 ? "colpito!" : "", age: 0, life: 0.6, small: true });
+      if (ufo.hp <= 0) {
+        explode(ufo.x, ufo.y, "#b76bff", true);
+        explode(ufo.x - 18, ufo.y + 6, "#ffcf3b", true);
+        sfx.ufoDead();
+        score += 120; updateHUD();
+        floaters.push({ x: ufo.x, y: ufo.y, text: "+120", age: 0, life: 1.1 });
+        ufo = null; ufoCooldown = 16 + Math.random() * 10;
+      }
+    }
+    function fireBolt(x, y) {
+      sfx.ufoShoot();
+      bolts.push({ x, y, sx: x, sy: y, tx: W / 2, ty: H + 30, age: 0, life: 0.85 });
     }
 
     // ---------- Esplosioni ----------
@@ -339,23 +352,29 @@
       particles.push({ shock: true, x, y, r: 6, maxR: big ? 130 : 90, life: 0.4, age: 0 });
     }
 
-    // ---------- Sparo: mira sempre al centro (mirino) ----------
-    function fire() {
+    // ---------- Tocco = sparo preciso ----------
+    function tapAt(x, y) {
       if (state !== STATE.PLAYING) return;
-      shots.push({ age: 0, life: 0.18 });
-      let hit = null, best = LOCK_RADIUS;
+      shots.push({ tx: x, ty: y, age: 0, life: 0.16 });
+      sfx.shoot();
+      // 1) UFO (bersaglio prioritario)
+      if (ufo && ufo.alive) {
+        const dx = x - ufo.x, dy = y - ufo.y;
+        if ((dx * dx) / (ufo.rx * ufo.rx) + (dy * dy) / (ufo.ry * ufo.ry) <= 1.15) { hitUfo(); return; }
+      }
+      // 2) meteorite: solo quello effettivamente toccato (il più in primo piano)
+      let target = null, bestGrowth = -1;
       for (const m of meteors) {
         if (!m.alive) continue;
-        const p = meteorScreen(m);
-        const d = Math.hypot(p.x - W / 2, p.y - H / 2);
-        if (d < best + meteorRadius(m)) { best = d; hit = m; }
+        const p = meteorPos(m);
+        if (Math.hypot(x - p.x, y - p.y) <= meteorRadius(m) && m.growth > bestGrowth) { bestGrowth = m.growth; target = m; }
       }
-      if (hit) {
-        hit.alive = false;
-        const p = meteorScreen(hit);
-        explode(p.x, p.y, hit.color, meteorRadius(hit) > 40);
+      if (target) {
+        target.alive = false;
+        const p = meteorPos(target);
+        explode(p.x, p.y, target.color, meteorRadius(target) > 40);
         sfx.explode();
-        const gained = 10 + Math.floor(meteorRadius(hit));
+        const gained = 10 + Math.floor(meteorRadius(target));
         score += gained; updateHUD();
         floaters.push({ x: p.x, y: p.y, text: "+" + gained, age: 0, life: 0.9 });
       } else {
@@ -363,8 +382,8 @@
       }
     }
 
-    // ---------- Danno ----------
-    function takeDamage(x, y) {
+    // ---------- Danno / fine ----------
+    function takeDamage() {
       lives--; updateHUD(); sfx.hit();
       flashEl.style.opacity = "0.55";
       setTimeout(() => { flashEl.style.opacity = "0"; }, 120);
@@ -381,14 +400,11 @@
 
     // ---------- Update ----------
     function update(dt) {
-      // smoothing della visuale (yaw con gestione del wrap)
-      yaw += norm180(targetYaw - yaw) * Math.min(1, dt * 12);
-      pitch += (targetPitch - pitch) * Math.min(1, dt * 12);
-
+      elapsed += dt;
       if (state !== STATE.PLAYING) return;
 
       waveTimer += dt;
-      if (waveTimer > 18) { waveTimer = 0; wave++; spawnInterval = Math.max(0.6, spawnInterval * 0.85); updateHUD(); }
+      if (waveTimer > 18) { waveTimer = 0; wave++; spawnInterval = Math.max(0.55, spawnInterval * 0.85); updateHUD(); }
 
       spawnTimer += dt;
       if (spawnTimer >= spawnInterval) {
@@ -401,19 +417,24 @@
         m.growth += m.speed * dt; m.rot += m.spin * dt;
         if (m.growth >= 1) {
           m.alive = false;
-          const p = meteorScreen(m);
-          explode(clamp(p.x, 0, W), clamp(p.y, 0, H), "#ff3b52", true);
+          const p = meteorPos(m);
+          explode(p.x, p.y, "#ff3b52", true);
           takeDamage();
         }
       }
       meteors = meteors.filter(m => m.alive);
 
-      // aggancio mirino
-      crosshairLocked = false;
-      for (const m of meteors) {
-        const p = meteorScreen(m);
-        if (Math.hypot(p.x - W / 2, p.y - H / 2) <= LOCK_RADIUS + meteorRadius(m) * 0.3) { crosshairLocked = true; break; }
+      updateUfo(dt);
+
+      // proiettili UFO
+      for (const b of bolts) {
+        b.age += dt;
+        if (b.age >= b.life) {
+          explode(b.tx, clamp(b.ty, 0, H), "#ff3b52", false);
+          takeDamage();
+        }
       }
+      bolts = bolts.filter(b => b.age < b.life);
 
       for (const pt of particles) {
         pt.age += dt;
@@ -425,37 +446,31 @@
       for (const s of shots) s.age += dt;
       shots = shots.filter(s => s.age < s.life);
 
-      for (const f of floaters) { f.age += dt; f.y -= 40 * dt; }
+      for (const f of floaters) { f.age += dt; f.y -= 34 * dt; }
       floaters = floaters.filter(f => f.age < f.life);
     }
 
     // ---------- Disegno ----------
-    function drawMeteor(m, p) {
-      const r = meteorRadius(m);
-      ctx.save();
-      ctx.translate(p.x, p.y);
+    function drawMeteor(m) {
+      const p = meteorPos(m), r = meteorRadius(m);
+      ctx.save(); ctx.translate(p.x, p.y);
       const halo = ctx.createRadialGradient(0, 0, r * 0.6, 0, 0, r * 2.2);
       halo.addColorStop(0, "rgba(255,120,40," + (0.25 * m.growth) + ")");
       halo.addColorStop(1, "rgba(255,120,40,0)");
-      ctx.fillStyle = halo;
-      ctx.beginPath(); ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(0, 0, r * 2.2, 0, Math.PI * 2); ctx.fill();
       ctx.rotate(m.rot);
       const body = ctx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.2, 0, 0, r);
       body.addColorStop(0, "#c9b8a3"); body.addColorStop(0.5, m.color); body.addColorStop(1, "#2f2820");
-      ctx.fillStyle = body;
-      ctx.beginPath();
+      ctx.fillStyle = body; ctx.beginPath();
       const pts = 12;
       for (let i = 0; i <= pts; i++) {
-        const a = (i / pts) * Math.PI * 2;
-        const rr = r * (0.9 + 0.12 * Math.sin(a * 3 + m.rot * 2));
+        const a = (i / pts) * Math.PI * 2, rr = r * (0.9 + 0.12 * Math.sin(a * 3 + m.rot * 2));
         const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
       ctx.closePath(); ctx.fill();
       ctx.fillStyle = "rgba(0,0,0,0.22)";
-      for (const c of m.craters) {
-        ctx.beginPath(); ctx.arc(Math.cos(c.a) * c.d * r, Math.sin(c.a) * c.d * r, c.r * r, 0, Math.PI * 2); ctx.fill();
-      }
+      for (const c of m.craters) { ctx.beginPath(); ctx.arc(Math.cos(c.a) * c.d * r, Math.sin(c.a) * c.d * r, c.r * r, 0, Math.PI * 2); ctx.fill(); }
       ctx.restore();
       if (m.growth > 0.55) {
         ctx.save();
@@ -466,57 +481,74 @@
       }
     }
 
-    // freccia verso un meteorite fuori campo
-    function drawEdgeArrow(p, m) {
-      const ang = Math.atan2(p.y - H / 2, p.x - W / 2);
-      const rad = Math.min(W, H) * 0.4;
-      const ax = W / 2 + Math.cos(ang) * rad, ay = H / 2 + Math.sin(ang) * rad;
-      const op = clamp(0.35 + m.growth, 0.35, 1);
-      ctx.save();
-      ctx.translate(ax, ay); ctx.rotate(ang);
-      ctx.fillStyle = (m.growth > 0.6 ? "rgba(255,59,82," : "rgba(56,240,255,") + op + ")";
-      ctx.beginPath(); ctx.moveTo(16, 0); ctx.lineTo(-8, -10); ctx.lineTo(-8, 10); ctx.closePath(); ctx.fill();
+    function drawUfo() {
+      const u = ufo, charging = u.charging > 0;
+      // linea di puntamento durante la carica
+      if (charging) {
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,59,82," + (0.35 + 0.35 * Math.sin(elapsed * 25)) + ")";
+        ctx.lineWidth = 2; ctx.setLineDash([4, 8]);
+        ctx.beginPath(); ctx.moveTo(u.x, u.y); ctx.lineTo(W / 2, H); ctx.stroke();
+        ctx.restore();
+      }
+      ctx.save(); ctx.translate(u.x, u.y);
+      // alone
+      const glow = ctx.createRadialGradient(0, 0, 6, 0, 0, u.rx * 1.8);
+      glow.addColorStop(0, charging ? "rgba(255,59,82,0.35)" : "rgba(183,107,255,0.28)");
+      glow.addColorStop(1, "rgba(183,107,255,0)");
+      ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, u.rx * 1.8, 0, Math.PI * 2); ctx.fill();
+      // raggio traente
+      ctx.fillStyle = charging ? "rgba(255,59,82,0.18)" : "rgba(120,220,255,0.12)";
+      ctx.beginPath(); ctx.moveTo(-u.rx * 0.5, u.ry * 0.4); ctx.lineTo(u.rx * 0.5, u.ry * 0.4);
+      ctx.lineTo(u.rx * 0.9, u.ry * 2.4); ctx.lineTo(-u.rx * 0.9, u.ry * 2.4); ctx.closePath(); ctx.fill();
+      // scocca
+      const body = ctx.createLinearGradient(0, -u.ry, 0, u.ry);
+      body.addColorStop(0, "#e8ecf2"); body.addColorStop(0.5, "#9aa3b2"); body.addColorStop(1, "#4a5160");
+      ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(0, 0, u.rx, u.ry, 0, 0, Math.PI * 2); ctx.fill();
+      // cupola
+      const dome = ctx.createLinearGradient(0, -u.ry * 1.6, 0, 0);
+      dome.addColorStop(0, charging ? "#ff9db0" : "#a9e7ff"); dome.addColorStop(1, "rgba(120,180,220,0.35)");
+      ctx.fillStyle = dome; ctx.beginPath(); ctx.ellipse(0, -u.ry * 0.35, u.rx * 0.5, u.ry * 1.15, 0, Math.PI, 0); ctx.fill();
+      // luci lampeggianti
+      for (let i = -2; i <= 2; i++) {
+        const on = (Math.floor(elapsed * 6) + i + 5) % 2 === 0;
+        ctx.fillStyle = on ? "#ffcf3b" : "#7a5a20";
+        ctx.beginPath(); ctx.arc(i * u.rx * 0.34, u.ry * 0.45, 3, 0, Math.PI * 2); ctx.fill();
+      }
+      // flash quando colpito
+      if (u.hitFx > 0) { ctx.fillStyle = "rgba(255,255,255," + (u.hitFx / 0.18 * 0.6) + ")"; ctx.beginPath(); ctx.ellipse(0, 0, u.rx, u.ry, 0, 0, Math.PI * 2); ctx.fill(); }
       ctx.restore();
+      // barra vita UFO
+      const bw = u.rx * 1.6, bh = 5, bx = u.x - bw / 2, by = u.y - u.ry * 1.9;
+      ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = "#7CFF6B"; ctx.fillRect(bx, by, bw * (u.hp / u.maxHp), bh);
     }
 
-    function drawCrosshair() {
-      const cx = W / 2, cy = H / 2, size = 34;
-      ctx.save(); ctx.translate(cx, cy);
-      const col = crosshairLocked ? "#ff3b52" : "rgba(56,240,255,0.9)";
-      ctx.strokeStyle = col; ctx.lineWidth = 2.5;
-      ctx.shadowColor = col; ctx.shadowBlur = crosshairLocked ? 16 : 8;
-      ctx.beginPath(); ctx.arc(0, 0, size, 0, Math.PI * 2); ctx.stroke();
-      ctx.beginPath(); ctx.arc(0, 0, size * 0.4, 0, Math.PI * 2); ctx.stroke();
-      const g = size + 12, s = size - 8;
-      ctx.beginPath();
-      ctx.moveTo(0, -g); ctx.lineTo(0, -s); ctx.moveTo(0, g); ctx.lineTo(0, s);
-      ctx.moveTo(-g, 0); ctx.lineTo(-s, 0); ctx.moveTo(g, 0); ctx.lineTo(s, 0);
-      ctx.stroke();
-      if (crosshairLocked) { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(0, 0, 3, 0, Math.PI * 2); ctx.fill(); }
+    function drawBolt(b) {
+      const t = b.age / b.life;
+      const x = b.sx + (b.tx - b.sx) * t, y = b.sy + (b.ty - b.sy) * t;
+      ctx.save();
+      const g = ctx.createRadialGradient(x, y, 1, x, y, 12);
+      g.addColorStop(0, "#fff"); g.addColorStop(0.4, "#ff3b52"); g.addColorStop(1, "rgba(255,59,82,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 12, 0, Math.PI * 2); ctx.fill();
       ctx.restore();
     }
 
     function render() {
       ctx.clearRect(0, 0, W, H);
-      const margin = 120;
-      const onScreen = [];
-      for (const m of meteors) {
-        const p = meteorScreen(m);
-        if (p.x > -margin && p.x < W + margin && p.y > -margin && p.y < H + margin) onScreen.push({ m, p });
-        else if (m.growth > 0.15) drawEdgeArrow(p, m); // fuori campo: mostra la freccia
-      }
-      onScreen.sort((a, b) => a.m.growth - b.m.growth);
-      for (const o of onScreen) drawMeteor(o.m, o.p);
+      meteors.slice().sort((a, b) => a.growth - b.growth).forEach(drawMeteor);
+      if (ufo) drawUfo();
+      for (const b of bolts) drawBolt(b);
 
-      // laser dal basso verso il mirino (centro)
+      // laser dello sparo (dal basso verso il punto toccato)
       for (const s of shots) {
         const t = s.age / s.life;
-        const y = H + 20 + (H / 2 - (H + 20)) * Math.min(1, t * 1.4);
+        const x = W / 2 + (s.tx - W / 2) * Math.min(1, t * 1.6);
+        const y = (H + 20) + (s.ty - (H + 20)) * Math.min(1, t * 1.6);
         ctx.save();
-        ctx.strokeStyle = "rgba(56,240,255," + (1 - t) + ")";
-        ctx.lineWidth = 4; ctx.lineCap = "round";
+        ctx.strokeStyle = "rgba(56,240,255," + (1 - t) + ")"; ctx.lineWidth = 4; ctx.lineCap = "round";
         ctx.shadowColor = "#38f0ff"; ctx.shadowBlur = 12;
-        ctx.beginPath(); ctx.moveTo(W / 2, H + 20); ctx.lineTo(W / 2, y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(W / 2, H + 20); ctx.lineTo(x, y); ctx.stroke();
         ctx.restore();
       }
 
@@ -535,13 +567,13 @@
 
       for (const f of floaters) {
         const t = f.age / f.life;
-        ctx.save(); ctx.globalAlpha = 1 - t; ctx.fillStyle = "#ffcf3b";
-        ctx.font = "bold 22px -apple-system, sans-serif"; ctx.textAlign = "center";
+        ctx.save(); ctx.globalAlpha = 1 - t;
+        ctx.fillStyle = f.small ? "#fff" : "#ffcf3b";
+        ctx.font = (f.small ? "bold 15px " : "bold 22px ") + "-apple-system, sans-serif"; ctx.textAlign = "center";
         ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 4;
-        ctx.fillText(f.text, f.x, f.y); ctx.restore();
+        if (f.text) ctx.fillText(f.text, f.x, f.y);
+        ctx.restore();
       }
-
-      if (state === STATE.PLAYING) drawCrosshair();
     }
 
     function loop(now) {
@@ -564,41 +596,22 @@
       }
     }
 
-    // ---------- Input: tocco = sparo, trascinamento = mira (fallback senza sensori) ----------
-    let ptrDown = false, ptrMoved = false, sx = 0, sy = 0, lx = 0, ly = 0;
-    function onDown(x, y) { ptrDown = true; ptrMoved = false; sx = lx = x; sy = ly = y; }
-    function onMove(x, y) {
-      if (!ptrDown) return;
-      const dx = x - lx, dy = y - ly; lx = x; ly = y;
-      if (Math.abs(x - sx) + Math.abs(y - sy) > 10) ptrMoved = true;
-      if (!gotOrientation) { // nessun sensore: si mira trascinando
-        targetYaw = norm180(targetYaw + dx * 0.12);
-        targetPitch = clamp(targetPitch - dy * 0.12, -55, 55);
-      }
-    }
-    function onUp() {
-      if (ptrDown && !ptrMoved) fire(); // tocco secco = sparo
-      ptrDown = false;
-    }
-    canvas.addEventListener("touchstart", (e) => { e.preventDefault(); const t = e.changedTouches[0]; onDown(t.clientX, t.clientY); }, { passive: false });
-    canvas.addEventListener("touchmove", (e) => { e.preventDefault(); const t = e.changedTouches[0]; onMove(t.clientX, t.clientY); }, { passive: false });
-    canvas.addEventListener("touchend", (e) => { e.preventDefault(); onUp(); }, { passive: false });
-    canvas.addEventListener("mousedown", (e) => onDown(e.clientX, e.clientY));
-    canvas.addEventListener("mousemove", (e) => onMove(e.clientX, e.clientY));
-    canvas.addEventListener("mouseup", onUp);
+    // ---------- Input ----------
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      for (const t of e.changedTouches) tapAt(t.clientX, t.clientY);
+    }, { passive: false });
+    canvas.addEventListener("mousedown", (e) => tapAt(e.clientX, e.clientY));
 
     // ---------- Avvio ----------
     async function startGame() {
       initAudio();
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
-      await enableOrientation();
       await startCamera();
       reset();
       startScreen.classList.add("hidden");
       overScreen.classList.add("hidden");
       state = STATE.PLAYING;
-      // se dopo 1.2s non arrivano dati dai sensori, spiega il fallback
-      setTimeout(() => { if (!gotOrientation) showTip("Sensori non disponibili: trascina il dito per mirare", 4000); }, 1200);
     }
     startBtn.addEventListener("click", startGame);
     restartBtn.addEventListener("click", () => {
