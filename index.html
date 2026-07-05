@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#02030a" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <title>Meteor Space — Naviga tra le costellazioni</title>
+  <title>Meteor Space — Salti nell'iperspazio</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌠</text></svg>" />
   <style>
-    :root { --accent: #38f0ff; --danger: #ff3b52; --gold: #ffcf3b; --ufo: #b76bff; }
+    :root { --accent: #38f0ff; --danger: #ff3b52; --gold: #ffcf3b; }
     * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
     html, body {
       width: 100%; height: 100%; overflow: hidden;
@@ -34,12 +34,13 @@
       background: rgba(0,0,0,0.4); backdrop-filter: blur(6px);
       -webkit-backdrop-filter: blur(6px);
       border: 1px solid rgba(255,255,255,0.15); border-radius: 12px;
-      padding: 8px 14px; font-size: 15px; line-height: 1.35;
+      padding: 8px 14px; font-size: 15px; line-height: 1.3;
     }
     .hud-label { font-size: 10px; letter-spacing: 2px; opacity: 0.6; text-transform: uppercase; }
     #score { font-size: 24px; font-weight: 700; color: var(--gold); }
     #lives { font-size: 22px; letter-spacing: 2px; }
-    #wave { color: var(--accent); font-weight: 600; }
+    #wave { font-size: 22px; color: var(--accent); font-weight: 700; }
+    #goal { font-size: 11px; opacity: 0.7; }
 
     #tip {
       position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 22px);
@@ -60,17 +61,17 @@
     }
     .overlay.hidden { display: none; }
     .title {
-      font-size: clamp(32px, 10vw, 60px); font-weight: 800; letter-spacing: 1px;
+      font-size: clamp(30px, 9vw, 56px); font-weight: 800; letter-spacing: 1px;
       background: linear-gradient(180deg, #fff, var(--accent));
       -webkit-background-clip: text; background-clip: text; color: transparent;
       text-shadow: 0 0 40px rgba(56,240,255,0.25); margin-bottom: 6px;
     }
     .subtitle { font-size: 15px; opacity: 0.85; max-width: 460px; line-height: 1.5; margin-bottom: 24px; }
     .instructions {
-      text-align: left; max-width: 410px; margin: 0 auto 26px;
-      font-size: 14px; line-height: 1.7; opacity: 0.9;
+      text-align: left; max-width: 420px; margin: 0 auto 26px;
+      font-size: 13.5px; line-height: 1.65; opacity: 0.9;
     }
-    .instructions li { list-style: none; margin: 4px 0; }
+    .instructions li { list-style: none; margin: 3px 0; }
     .instructions b { color: var(--accent); }
     button.btn {
       pointer-events: auto; cursor: pointer;
@@ -88,6 +89,20 @@
       position: absolute; inset: 0; z-index: 4; pointer-events: none;
       background: var(--danger); opacity: 0; transition: opacity 0.1s ease-out;
     }
+    /* Schermata salto iperspazio */
+    #warpScreen {
+      background: radial-gradient(ellipse at center, rgba(2,4,14,0.35) 0%, rgba(2,4,14,0.72) 100%);
+      pointer-events: none;
+    }
+    #warpShip { font-size: 46px; margin-bottom: 6px; filter: drop-shadow(0 0 14px rgba(56,240,255,0.7)); }
+    #warpTitle { font-size: 13px; letter-spacing: 5px; color: var(--accent); text-transform: uppercase; opacity: 0.9; }
+    #warpName { font-size: clamp(24px, 7vw, 40px); font-weight: 800; margin: 8px 0 2px; }
+    #warpSub { font-size: 14px; opacity: 0.7; }
+    #warpPerk {
+      margin-top: 18px; font-size: 15px; font-weight: 600; color: var(--gold);
+      border: 1px solid rgba(255,207,59,0.5); border-radius: 40px; padding: 8px 20px;
+      background: rgba(255,207,59,0.08);
+    }
   </style>
 </head>
 <body>
@@ -102,8 +117,9 @@
         <div id="score">0</div>
       </div>
       <div class="hud-box" style="text-align:center">
-        <div class="hud-label">Ondata</div>
+        <div class="hud-label">Livello</div>
         <div id="wave">1</div>
+        <div id="goal">0/12</div>
       </div>
       <div class="hud-box" style="text-align:right">
         <div class="hud-label">Vite</div>
@@ -116,17 +132,26 @@
     <!-- Start screen -->
     <div id="startScreen" class="overlay">
       <div class="title">METEOR&nbsp;SPACE</div>
-      <div class="subtitle">Sei alla deriva nello spazio profondo, tra le costellazioni. Distruggi i meteoriti e gli UFO prima che ti raggiungano!</div>
+      <div class="subtitle">Attraversa i settori dello spazio: ogni livello è un'ambientazione diversa, con difficoltà e perk propri. Tra un salto e l'altro entri in iperspazio!</div>
       <ul class="instructions">
         <li>👆 <b>Tocca un meteorite</b> per farlo esplodere</li>
-        <li>💎 I <b>cristalli verdi</b> si frantumano in schegge rimbalzanti (punti bonus)</li>
-        <li>🟡 I <b>cristalli d'oro</b> (rari) scatenano una <b>nova</b> che distrugge le meteore vicine, a catena</li>
-        <li>❤️ I <b>cuori</b> (rari) ti ridanno una vita (fino a 5)</li>
-        <li>🛸 Gli <b>UFO</b> emergono dallo spazio e ti attaccano: toccali più volte</li>
-        <li>🌌 <b>Naviga tra le costellazioni</b> che attraversano il cielo</li>
+        <li>💎 <b>Cristallo verde</b>: si frantuma in schegge (punti bonus)</li>
+        <li>🟡 <b>Cristallo d'oro</b> (raro): nova a catena che distrugge le meteore</li>
+        <li>❤️ <b>Cuore</b> (raro): recupera una vita (max 5)</li>
+        <li>🛸 <b>UFO</b>: emergono e attaccano — toccali più volte</li>
+        <li>🚀 Completa il <b>Livello</b> per saltare al settore successivo</li>
       </ul>
       <button id="startBtn" class="btn">GIOCA</button>
       <div class="hint">Gioca con l'audio acceso per l'effetto completo. 🔊</div>
+    </div>
+
+    <!-- Hyperspace jump -->
+    <div id="warpScreen" class="overlay hidden">
+      <div id="warpShip">🚀</div>
+      <div id="warpTitle">Salto iperspazio</div>
+      <div id="warpName">Livello 2 · Nebulosa di Orione</div>
+      <div id="warpSub">1344 anni luce</div>
+      <div id="warpPerk">Perk: Vita extra +1</div>
     </div>
 
     <!-- Game over screen -->
@@ -148,10 +173,15 @@
     const scoreEl = document.getElementById("score");
     const livesEl = document.getElementById("lives");
     const waveEl = document.getElementById("wave");
+    const goalEl = document.getElementById("goal");
     const flashEl = document.getElementById("flash");
     const tipEl = document.getElementById("tip");
     const startScreen = document.getElementById("startScreen");
     const overScreen = document.getElementById("overScreen");
+    const warpScreen = document.getElementById("warpScreen");
+    const warpName = document.getElementById("warpName");
+    const warpSub = document.getElementById("warpSub");
+    const warpPerk = document.getElementById("warpPerk");
     const startBtn = document.getElementById("startBtn");
     const restartBtn = document.getElementById("restartBtn");
     const finalScoreEl = document.getElementById("finalScore");
@@ -214,46 +244,63 @@
       shard: () => beep("triangle", 1600, 900, 0.08, 0.07),
       nova: () => { noiseBurst(0.5, 0.4); beep("sawtooth", 120, 620, 0.4, 0.20); beep("square", 320, 1200, 0.3, 0.12); },
       heal: () => { beep("sine", 520, 900, 0.25, 0.12); beep("sine", 780, 1300, 0.32, 0.10); },
-      hit: () => { noiseBurst(0.5, 0.5); beep("sawtooth", 120, 30, 0.5, 0.3); },
+      shield: () => beep("sine", 300, 700, 0.2, 0.12),
       ufoAppear: () => { beep("sine", 500, 900, 0.5, 0.10); beep("sine", 700, 1100, 0.5, 0.08); },
       ufoShoot: () => beep("sawtooth", 620, 140, 0.28, 0.14),
       ufoTap: () => beep("square", 500, 700, 0.06, 0.10),
       ufoDead: () => { noiseBurst(0.6, 0.4); beep("sawtooth", 300, 30, 0.7, 0.22); },
+      warp: () => { beep("sine", 180, 1500, 1.2, 0.14); noiseBurst(0.6, 0.10); beep("square", 120, 900, 1.0, 0.07); },
       over: () => beep("sine", 400, 60, 1.0, 0.25),
     };
 
-    // ---------- Cielo: stelle in movimento + nebulose + stelle cadenti + costellazioni ----------
+    // ---------- Livelli / ambientazioni ----------
+    const LEVELS = [
+      { name: "Cintura di Asteroidi", sub: "Sistema Solare esterno",
+        bg: ["#241a10", "#120c08", "#02030a"], neb: [[200,120,40],[150,90,30]], star: "#ffe8c8", accent: "210,170,120",
+        goal: 12, spawn: 1.5, speedMul: 1.0, ufo: 0.0, dbl: 0.0, crystal: 1.0, perk: { k: "none", t: "Sistemi nominali" } },
+      { name: "Nebulosa di Orione", sub: "1344 anni luce",
+        bg: ["#101a3a", "#0a0f24", "#02030a"], neb: [[90,120,255],[150,90,255]], star: "#cfe0ff", accent: "120,160,255",
+        goal: 14, spawn: 1.35, speedMul: 1.12, ufo: 0.5, dbl: 0.15, crystal: 1.0, perk: { k: "life", t: "Vita extra +1" } },
+      { name: "Campo di Ghiaccio", sub: "Cintura di Kuiper",
+        bg: ["#0a2630", "#07141c", "#02030a"], neb: [[40,200,200],[60,160,220]], star: "#d6fbff", accent: "120,220,230",
+        goal: 16, spawn: 1.25, speedMul: 1.2, ufo: 0.5, dbl: 0.2, crystal: 1.6, perk: { k: "crystal", t: "Cristalli frequenti" } },
+      { name: "Settore Cremisi", sub: "Zona di guerra",
+        bg: ["#2a0d14", "#160709", "#02030a"], neb: [[255,70,90],[200,40,120]], star: "#ffd6dd", accent: "255,120,140",
+        goal: 18, spawn: 1.15, speedMul: 1.3, ufo: 0.9, dbl: 0.25, crystal: 1.0, perk: { k: "shield", t: "Scudo deflettore" } },
+      { name: "Nucleo Galattico", sub: "Zona densa",
+        bg: ["#2a2410", "#161206", "#02030a"], neb: [[255,200,60],[255,150,40]], star: "#fff0c0", accent: "255,210,120",
+        goal: 20, spawn: 1.0, speedMul: 1.4, ufo: 0.7, dbl: 0.35, crystal: 1.3, perk: { k: "nova", t: "Nova potenziata" } },
+      { name: "Vuoto di Andromeda", sub: "Galassia vicina",
+        bg: ["#1a0d2a", "#0d0716", "#02030a"], neb: [[150,80,255],[90,60,200]], star: "#e6d6ff", accent: "170,130,255",
+        goal: 22, spawn: 0.95, speedMul: 1.55, ufo: 0.9, dbl: 0.4, crystal: 1.0, perk: { k: "life", t: "Riparazione +1 vita" } },
+    ];
+
+    // ---------- Cielo (tema dinamico) ----------
     let stars = [], nebulae = [], shootingStars = [], shootTimer = 3;
-    const NEB_COLORS = [[130, 90, 255], [60, 140, 255], [40, 200, 180], [255, 90, 160]];
+    let bgCols = LEVELS[0].bg, themeNeb = LEVELS[0].neb, starTint = LEVELS[0].star, conAccent = LEVELS[0].accent;
+    function regenNebulae() {
+      nebulae = [];
+      const nb = 2 + (Math.random() * 2 | 0);
+      for (let i = 0; i < nb; i++) {
+        const c = themeNeb[(Math.random() * themeNeb.length) | 0];
+        nebulae.push({
+          x: Math.random() * W, y: Math.random() * H, r: W * (0.35 + Math.random() * 0.45),
+          c, a: 0.10 + Math.random() * 0.09, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6,
+        });
+      }
+    }
     function initSky() {
       const n = Math.round((W * H) / 8500);
       stars = [];
       for (let i = 0; i < n; i++) {
-        stars.push({
-          x: Math.random() * W, y: Math.random() * H,
-          z: 0.3 + Math.random() * 0.7,          // profondità: più vicino = più veloce/luminoso
-          r: 0.4 + Math.random() * 1.6,
-          tw: Math.random() * 6.28,
-        });
+        stars.push({ x: Math.random() * W, y: Math.random() * H, z: 0.3 + Math.random() * 0.7, r: 0.4 + Math.random() * 1.6, tw: Math.random() * 6.28 });
       }
-      nebulae = [];
-      const nb = 2 + (Math.random() * 2 | 0);
-      for (let i = 0; i < nb; i++) {
-        nebulae.push({
-          x: Math.random() * W, y: Math.random() * H, r: W * (0.35 + Math.random() * 0.4),
-          c: NEB_COLORS[(Math.random() * NEB_COLORS.length) | 0], a: 0.10 + Math.random() * 0.08,
-          vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6,
-        });
-      }
+      regenNebulae();
       shootingStars = []; shootTimer = 2 + Math.random() * 4;
     }
     function spawnShootingStar() {
       const ang = Math.PI * (0.13 + Math.random() * 0.22), sp = 520 + Math.random() * 320;
-      shootingStars.push({
-        x: Math.random() * W, y: Math.random() * H * 0.55,
-        vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp,
-        len: 90 + Math.random() * 90, age: 0, life: 0.7 + Math.random() * 0.4,
-      });
+      shootingStars.push({ x: Math.random() * W, y: Math.random() * H * 0.55, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, len: 90 + Math.random() * 90, age: 0, life: 0.7 + Math.random() * 0.4 });
     }
     const CONSTELLATIONS = [
       { name: "Orione", pts: [[0.18,0.08],[0.74,0.12],[0.42,0.45],[0.5,0.48],[0.58,0.46],[0.26,0.9],[0.78,0.85]], edges: [[0,2],[1,4],[2,3],[3,4],[2,5],[4,6]] },
@@ -269,25 +316,11 @@
     function spawnConstellation() {
       const def = CONSTELLATIONS[(Math.random() * CONSTELLATIONS.length) | 0];
       const scale = Math.min(W, H) * (0.32 + Math.random() * 0.22);
-      activeCons.push({
-        def, scale,
-        x: Math.random() * Math.max(1, W - scale * 0.9),
-        y: H * 0.05 + Math.random() * Math.max(1, H * 0.75 - scale),
-        vx: (Math.random() - 0.5) * 9, vy: 5 + Math.random() * 7,
-        age: 0, life: 12 + Math.random() * 5,
-      });
+      activeCons.push({ def, scale, x: Math.random() * Math.max(1, W - scale * 0.9), y: H * 0.05 + Math.random() * Math.max(1, H * 0.75 - scale), vx: (Math.random() - 0.5) * 9, vy: 5 + Math.random() * 7, age: 0, life: 12 + Math.random() * 5 });
     }
-    function conAlpha(c) {
-      const fi = 1.8, fo = 3;
-      if (c.age < fi) return c.age / fi;
-      if (c.age > c.life - fo) return Math.max(0, (c.life - c.age) / fo);
-      return 1;
-    }
+    function conAlpha(c) { const fi = 1.8, fo = 3; if (c.age < fi) return c.age / fi; if (c.age > c.life - fo) return Math.max(0, (c.life - c.age) / fo); return 1; }
     function updateSky(dt) {
-      for (const s of stars) {
-        s.y += (10 + s.z * 34) * dt; // navighiamo: le stelle scorrono verso di noi
-        if (s.y > H + 2) { s.y = -2; s.x = Math.random() * W; }
-      }
+      for (const s of stars) { s.y += (10 + s.z * 34) * dt; if (s.y > H + 2) { s.y = -2; s.x = Math.random() * W; } }
       for (const nb of nebulae) {
         nb.x += nb.vx * dt; nb.y += nb.vy * dt;
         if (nb.x < -nb.r) nb.x = W + nb.r; else if (nb.x > W + nb.r) nb.x = -nb.r;
@@ -304,24 +337,21 @@
     }
     function drawSky() {
       const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, "#0b1236"); g.addColorStop(0.5, "#070a1c"); g.addColorStop(1, "#02030a");
+      g.addColorStop(0, bgCols[0]); g.addColorStop(0.5, bgCols[1]); g.addColorStop(1, bgCols[2]);
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-      // nebulose colorate
       for (const nb of nebulae) {
         const ng = ctx.createRadialGradient(nb.x, nb.y, 0, nb.x, nb.y, nb.r);
         ng.addColorStop(0, "rgba(" + nb.c[0] + "," + nb.c[1] + "," + nb.c[2] + "," + nb.a + ")");
         ng.addColorStop(1, "rgba(" + nb.c[0] + "," + nb.c[1] + "," + nb.c[2] + ",0)");
         ctx.fillStyle = ng; ctx.beginPath(); ctx.arc(nb.x, nb.y, nb.r, 0, 6.28); ctx.fill();
       }
-      // stelle
       for (const s of stars) {
         const tw = 0.55 + 0.45 * Math.sin(elapsed * 2 + s.tw);
         ctx.globalAlpha = tw * (0.35 + s.z * 0.65);
-        ctx.fillStyle = "#dfeaff";
+        ctx.fillStyle = starTint;
         ctx.beginPath(); ctx.arc(s.x, s.y, s.r * (0.6 + s.z * 0.7), 0, 6.28); ctx.fill();
       }
       ctx.globalAlpha = 1;
-      // stelle cadenti
       for (const ss of shootingStars) {
         const t = ss.age / ss.life, sp = Math.hypot(ss.vx, ss.vy) || 1;
         const tx = ss.x - ss.vx / sp * ss.len, ty = ss.y - ss.vy / sp * ss.len;
@@ -332,40 +362,73 @@
         ctx.fillStyle = "rgba(255,255,255," + (1 - t) + ")";
         ctx.beginPath(); ctx.arc(ss.x, ss.y, 1.8, 0, 6.28); ctx.fill();
       }
-      // costellazioni
       for (const c of activeCons) {
         const a = conAlpha(c) * 0.85;
         const P = c.def.pts.map(p => [c.x + p[0] * c.scale, c.y + p[1] * c.scale]);
-        ctx.strokeStyle = "rgba(120,180,255," + (a * 0.5) + ")"; ctx.lineWidth = 1.2;
+        ctx.strokeStyle = "rgba(" + conAccent + "," + (a * 0.5) + ")"; ctx.lineWidth = 1.2;
         for (const e of c.def.edges) { ctx.beginPath(); ctx.moveTo(P[e[0]][0], P[e[0]][1]); ctx.lineTo(P[e[1]][0], P[e[1]][1]); ctx.stroke(); }
-        ctx.shadowColor = "#9fc6ff"; ctx.shadowBlur = 8;
+        ctx.shadowColor = "rgba(" + conAccent + ",1)"; ctx.shadowBlur = 8;
         for (const p of P) { ctx.fillStyle = "rgba(232,242,255," + a + ")"; ctx.beginPath(); ctx.arc(p[0], p[1], 2.3, 0, 6.28); ctx.fill(); }
         ctx.shadowBlur = 0;
-        ctx.fillStyle = "rgba(159,198,255," + (a * 0.9) + ")";
+        ctx.fillStyle = "rgba(" + conAccent + "," + (a * 0.9) + ")";
         ctx.font = "600 14px -apple-system, sans-serif"; ctx.textAlign = "left";
         ctx.fillText(c.def.name, c.x, c.y - 8);
       }
     }
 
+    // ---------- Iperspazio ----------
+    let warpLines = [], warpT = 0;
+    const WARP_DUR = 3.6;
+    function initWarp() {
+      warpLines = [];
+      for (let i = 0; i < 170; i++) {
+        const rad = Math.random() * Math.min(W, H) * 0.3;
+        warpLines.push({ ang: Math.random() * 6.28, rad, prev: rad, spd: 200 + Math.random() * 320 });
+      }
+    }
+    function updateWarp(dt) {
+      warpT += dt;
+      const boost = 1 + warpT * 3, cx = W / 2, cy = H / 2, maxD = Math.hypot(W, H) / 2 + 40;
+      for (const l of warpLines) {
+        l.prev = l.rad; l.rad += l.spd * boost * dt;
+        if (l.rad > maxD) { l.rad = Math.random() * 20; l.prev = l.rad; l.ang = Math.random() * 6.28; }
+      }
+      if (warpT >= WARP_DUR) startLevel(level + 1);
+    }
+    function drawWarp() {
+      ctx.fillStyle = "#01020a"; ctx.fillRect(0, 0, W, H);
+      const cx = W / 2, cy = H / 2;
+      const fade = clamp(warpT / 0.4, 0, 1) * clamp((WARP_DUR - warpT) / 0.6, 0, 1);
+      ctx.lineCap = "round";
+      for (const l of warpLines) {
+        const x1 = cx + Math.cos(l.ang) * l.prev, y1 = cy + Math.sin(l.ang) * l.prev;
+        const x2 = cx + Math.cos(l.ang) * l.rad, y2 = cy + Math.sin(l.ang) * l.rad;
+        const alpha = clamp(l.rad / (Math.min(W, H) * 0.5), 0.1, 1) * fade;
+        ctx.strokeStyle = "rgba(190,225,255," + alpha + ")";
+        ctx.lineWidth = 1 + l.rad / Math.min(W, H) * 2;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+      const gg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 130);
+      gg.addColorStop(0, "rgba(200,230,255," + (0.5 * fade) + ")"); gg.addColorStop(1, "rgba(200,230,255,0)");
+      ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(cx, cy, 130, 0, 6.28); ctx.fill();
+    }
+
     // ---------- Stato ----------
-    const STATE = { MENU: 0, PLAYING: 1, OVER: 2 };
+    const STATE = { MENU: 0, PLAYING: 1, OVER: 2, WARP: 3 };
     let state = STATE.MENU;
     let meteors = [], particles = [], shots = [], floaters = [], bolts = [], fragments = [], shockwaves = [];
     let ufo = null, ufoCooldown = 0;
-    let score = 0, lives = 3, wave = 1;
+    let score = 0, lives = 3, level = 1, cleared = 0, goal = 12;
     const MAX_LIVES = 5;
-    let spawnTimer = 0, spawnInterval = 1.6, waveTimer = 0, lastTime = 0, elapsed = 0;
+    let spawnTimer = 0, spawnInterval = 1.5, lastTime = 0, elapsed = 0;
+    // parametri del livello corrente
+    let curSpeedMul = 1, curUfo = 0, curDbl = 0, crystalMul = 1;
+    let perks = { novaBig: false }, shield = false;
 
-    function reset() {
-      meteors = []; particles = []; shots = []; floaters = []; bolts = []; fragments = []; shockwaves = [];
-      ufo = null; ufoCooldown = 8;
-      score = 0; lives = 3; wave = 1;
-      spawnTimer = 0; spawnInterval = 1.6; waveTimer = 0;
-      updateHUD();
-      showTip("Tocca i meteoriti per farli esplodere!", 3000);
-    }
     function updateHUD() {
-      scoreEl.textContent = score; waveEl.textContent = wave;
+      scoreEl.textContent = score;
+      waveEl.textContent = level;
+      goalEl.textContent = clamp(cleared, 0, goal) + "/" + goal;
       livesEl.textContent = lives > 0 ? "❤️".repeat(lives) : "💀";
     }
     let tipTimer = null;
@@ -375,22 +438,68 @@
       tipTimer = setTimeout(() => tipEl.classList.remove("show"), ms || 2500);
     }
 
+    function applyTheme(def) { bgCols = def.bg; starTint = def.star; conAccent = def.accent; themeNeb = def.neb; regenNebulae(); }
+    function applyPerk(p) {
+      if (p.k === "life") { lives = Math.min(MAX_LIVES, lives + 1); }
+      else if (p.k === "crystal") { crystalMul *= 1.7; }
+      else if (p.k === "nova") { perks.novaBig = true; }
+      else if (p.k === "shield") { shield = true; }
+    }
+    function startLevel(n) {
+      level = n;
+      const def = LEVELS[(n - 1) % LEVELS.length];
+      const loop = Math.floor((n - 1) / LEVELS.length);
+      applyTheme(def);
+      goal = def.goal + loop * 5;
+      cleared = 0;
+      curSpeedMul = def.speedMul + loop * 0.15;
+      curUfo = Math.min(1, def.ufo + loop * 0.05);
+      curDbl = Math.min(0.7, def.dbl + loop * 0.05);
+      crystalMul = def.crystal;
+      spawnInterval = Math.max(0.5, def.spawn * Math.pow(0.92, loop));
+      perks = { novaBig: false }; shield = false;
+      applyPerk(def.perk);
+      spawnTimer = 0; ufoCooldown = 6;
+      meteors = []; ufo = null; bolts = []; fragments = []; shockwaves = [];
+      warpScreen.classList.add("hidden");
+      state = STATE.PLAYING;
+      updateHUD();
+      showTip("Livello " + n + " — " + def.name + (def.perk.k !== "none" ? "  ·  " + def.perk.t : ""), 3200);
+    }
+    function enterWarp() {
+      state = STATE.WARP; warpT = 0; initWarp();
+      meteors = []; ufo = null; bolts = []; fragments = []; shockwaves = []; particles = [];
+      sfx.warp();
+      const def = LEVELS[level % LEVELS.length]; // prossimo livello
+      warpName.textContent = "Livello " + (level + 1) + " · " + def.name;
+      warpSub.textContent = def.sub;
+      warpPerk.textContent = def.perk.k === "none" ? "Sistemi nominali" : "Perk: " + def.perk.t;
+      warpScreen.classList.remove("hidden");
+    }
+
+    function reset() {
+      meteors = []; particles = []; shots = []; floaters = []; bolts = []; fragments = []; shockwaves = [];
+      ufo = null; score = 0; lives = 3;
+      startLevel(1);
+    }
+
     // ---------- Meteoriti ----------
     const METEOR_COLORS = ["#8a7a6a", "#9a8574", "#6f6355", "#a58b6f"];
     function spawnMeteor() {
       const margin = 0.15;
       const x = W * (margin + Math.random() * (1 - 2 * margin));
       const y = H * (margin + Math.random() * (1 - 2 * margin));
-      const speed = (0.05 + Math.random() * 0.05) * (1 + (wave - 1) * 0.12);
+      const speed = (0.05 + Math.random() * 0.05) * curSpeedMul;
       const maxR = 42 + Math.random() * 34;
       const craters = [];
       const n = 3 + Math.floor(Math.random() * 4);
       for (let i = 0; i < n; i++)
         craters.push({ a: Math.random() * Math.PI * 2, d: 0.2 + Math.random() * 0.55, r: 0.1 + Math.random() * 0.18 });
       const roll = Math.random();
-      const nova = roll < 0.06;                          // raro: cristallo d'oro, onda a catena
-      const heal = !nova && roll < 0.11;                 // raro: cuore, ridà una vita
-      const special = !nova && !heal && roll < 0.31;     // ~20%: cristallo verde che si frantuma
+      const pNova = 0.06 * crystalMul, pHeal = pNova + 0.05 * crystalMul, pSpec = pHeal + 0.20 * crystalMul;
+      const nova = roll < pNova;
+      const heal = !nova && roll < pHeal;
+      const special = !nova && !heal && roll < pSpec;
       meteors.push({
         x, y, growth: 0.001, speed, maxR,
         rot: Math.random() * Math.PI * 2, spin: (Math.random() - 0.5) * 1.5,
@@ -398,50 +507,6 @@
         color: nova ? "#ffd23b" : heal ? "#ff5b7f" : special ? "#2ee6c0" : METEOR_COLORS[(Math.random() * METEOR_COLORS.length) | 0],
         special, nova, heal, craters, alive: true,
       });
-    }
-
-    // cuore-cristallo: recupera una vita (o punti se sei al massimo)
-    function healLife(x, y) {
-      sfx.heal();
-      if (lives < MAX_LIVES) {
-        lives++; updateHUD();
-        floaters.push({ x, y, text: "+1 ❤️", age: 0, life: 1.2 });
-        showTip("Vita recuperata! ❤️", 1800);
-      } else {
-        score += 50; updateHUD();
-        floaters.push({ x, y, text: "+50", age: 0, life: 0.9 });
-      }
-    }
-
-    // onda d'urto della nova: distrugge le meteore che raggiunge (reazione a catena)
-    function novaBlast(x, y) {
-      sfx.nova();
-      shockwaves.push({ x, y, r: 8, maxR: Math.min(W, H) * 0.55, age: 0, life: 0.55 });
-      floaters.push({ x, y, text: "NOVA!", age: 0, life: 1.0 });
-    }
-    function updateShockwaves(dt) {
-      if (!shockwaves.length) return;
-      let scored = false;
-      for (const sw of shockwaves.slice()) {
-        sw.age += dt;
-        sw.r = (sw.age / sw.life) * sw.maxR;
-        for (const m of meteors) {
-          if (!m.alive) continue;
-          const p = meteorPos(m);
-          if (Math.hypot(p.x - sw.x, p.y - sw.y) <= sw.r + meteorRadius(m)) {
-            m.alive = false;
-            explode(p.x, p.y, m.color, meteorRadius(m) > 40);
-            const g = 10 + Math.floor(meteorRadius(m));
-            score += g; scored = true;
-            floaters.push({ x: p.x, y: p.y, text: "+" + g, age: 0, life: 0.8, small: true });
-            if (m.nova) novaBlast(p.x, p.y);            // catena
-            else if (m.heal) healLife(p.x, p.y);
-            else if (m.special) splitMeteor(p.x, p.y, m.color);
-          }
-        }
-      }
-      shockwaves = shockwaves.filter(sw => sw.age < sw.life);
-      if (scored) updateHUD();
     }
     function meteorRadius(m) { return 4 + m.growth * m.maxR; }
     function meteorPos(m) { return { x: m.x + m.wobbleX * m.growth, y: m.y + m.wobbleY * m.growth }; }
@@ -452,78 +517,43 @@
       const n = 4 + (Math.random() * 3 | 0);
       for (let i = 0; i < n; i++) {
         const a = Math.random() * Math.PI * 2, sp = 150 + Math.random() * 190;
-        fragments.push({
-          x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-          r: 8 + Math.random() * 7, rot: Math.random() * 6.28, spin: (Math.random() - 0.5) * 6,
-          color, life: 4.5 + Math.random() * 1.5, age: 0, alive: true,
-        });
+        fragments.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, r: 8 + Math.random() * 7, rot: Math.random() * 6.28, spin: (Math.random() - 0.5) * 6, color, life: 4.5 + Math.random() * 1.5, age: 0, alive: true });
       }
     }
+    function novaBlast(x, y) {
+      sfx.nova();
+      shockwaves.push({ x, y, r: 8, maxR: Math.min(W, H) * (perks.novaBig ? 0.8 : 0.55), age: 0, life: 0.55 });
+      floaters.push({ x, y, text: "NOVA!", age: 0, life: 1.0 });
+    }
+    function healLife(x, y) {
+      sfx.heal();
+      if (lives < MAX_LIVES) { lives++; updateHUD(); floaters.push({ x, y, text: "+1 ❤️", age: 0, life: 1.2 }); showTip("Vita recuperata! ❤️", 1600); }
+      else { score += 50; updateHUD(); floaters.push({ x, y, text: "+50", age: 0, life: 0.9 }); }
+    }
+    function meteorCleared() { cleared++; updateHUD(); }
 
-    // ---------- UFO ----------
-    function spaceSpot() { return { x: W * (0.15 + Math.random() * 0.7), y: H * (0.12 + Math.random() * 0.52) }; }
-    function spawnUfo() {
-      const spot = spaceSpot();
-      ufo = {
-        x: spot.x, y: spot.y, spawnX: spot.x, spawnY: spot.y, tx: spot.x, ty: spot.y,
-        rx: 40, ry: 18, hp: 3, maxHp: 3,
-        wpTimer: 0, fireCd: 3.4, charging: 0, hitFx: 0, alive: true,
-        emerge: 0, scale: 0.12,
-      };
-      sfx.ufoAppear();
-      showTip("🛸 Un UFO emerge dallo spazio! Colpiscilo!", 2800);
-    }
-    function updateUfo(dt) {
-      if (!ufo) {
-        if (state === STATE.PLAYING && wave >= 2) {
-          ufoCooldown -= dt;
-          if (ufoCooldown <= 0) { ufoCooldown = 14 + Math.random() * 10; if (Math.random() < 0.7) spawnUfo(); }
+    function updateShockwaves(dt) {
+      if (!shockwaves.length) return;
+      for (const sw of shockwaves.slice()) {
+        sw.age += dt;
+        sw.r = (sw.age / sw.life) * sw.maxR;
+        for (const m of meteors) {
+          if (!m.alive) continue;
+          const p = meteorPos(m);
+          if (Math.hypot(p.x - sw.x, p.y - sw.y) <= sw.r + meteorRadius(m)) {
+            m.alive = false;
+            explode(p.x, p.y, m.color, meteorRadius(m) > 40);
+            const g = 10 + Math.floor(meteorRadius(m));
+            score += g;
+            floaters.push({ x: p.x, y: p.y, text: "+" + g, age: 0, life: 0.8, small: true });
+            meteorCleared();
+            if (m.nova) novaBlast(p.x, p.y);
+            else if (m.heal) healLife(p.x, p.y);
+            else if (m.special) splitMeteor(p.x, p.y, m.color);
+          }
         }
-        return;
       }
-      if (ufo.emerge < 1) {
-        ufo.emerge = Math.min(1, ufo.emerge + dt / 0.85);
-        const e = 1 - (1 - ufo.emerge) * (1 - ufo.emerge);
-        ufo.scale = 0.12 + 0.88 * e;
-        ufo.x = ufo.spawnX; ufo.y = ufo.spawnY - 12 * ufo.emerge;
-        if (ufo.hitFx > 0) ufo.hitFx -= dt;
-        return;
-      }
-      ufo.scale = 1;
-      ufo.wpTimer -= dt;
-      if (ufo.wpTimer <= 0) {
-        ufo.wpTimer = 0.9 + Math.random() * 1.4;
-        ufo.tx = W * (0.12 + Math.random() * 0.76);
-        ufo.ty = H * (0.10 + Math.random() * 0.45);
-      }
-      ufo.x += (ufo.tx - ufo.x) * Math.min(1, dt * 1.8);
-      ufo.y += (ufo.ty - ufo.y) * Math.min(1, dt * 1.8);
-      ufo.y += Math.sin(elapsed * 3) * 0.4;
-      if (ufo.hitFx > 0) ufo.hitFx -= dt;
-      if (ufo.charging > 0) {
-        ufo.charging -= dt;
-        if (ufo.charging <= 0) { fireBolt(ufo.x, ufo.y); ufo.fireCd = 3.2 + Math.random() * 2; }
-      } else {
-        ufo.fireCd -= dt;
-        if (ufo.fireCd <= 0) ufo.charging = 0.9;
-      }
-    }
-    function hitUfo() {
-      ufo.hp--; ufo.hitFx = 0.18; sfx.ufoTap();
-      if (ufo.hp <= 0) {
-        explode(ufo.x, ufo.y, "#b76bff", true);
-        explode(ufo.x - 18, ufo.y + 6, "#ffcf3b", true);
-        sfx.ufoDead();
-        score += 120; updateHUD();
-        floaters.push({ x: ufo.x, y: ufo.y, text: "+120", age: 0, life: 1.1 });
-        ufo = null; ufoCooldown = 16 + Math.random() * 10;
-      } else {
-        floaters.push({ x: ufo.x, y: ufo.y - ufo.ry - 10, text: "colpito!", age: 0, life: 0.6, small: true });
-      }
-    }
-    function fireBolt(x, y) {
-      sfx.ufoShoot();
-      bolts.push({ x, y, sx: x, sy: y, tx: W / 2, ty: H + 30, age: 0, life: 0.85 });
+      shockwaves = shockwaves.filter(sw => sw.age < sw.life);
     }
 
     // ---------- Esplosioni ----------
@@ -531,11 +561,7 @@
       const count = big ? 34 : 22;
       for (let i = 0; i < count; i++) {
         const a = Math.random() * Math.PI * 2, sp = (big ? 120 : 80) * (0.3 + Math.random());
-        particles.push({
-          x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
-          life: 0.5 + Math.random() * 0.5, age: 0, r: 2 + Math.random() * 4,
-          color: Math.random() < 0.5 ? "#ffcf3b" : (Math.random() < 0.5 ? "#ff7b3b" : color),
-        });
+        particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.5 + Math.random() * 0.5, age: 0, r: 2 + Math.random() * 4, color: Math.random() < 0.5 ? "#ffcf3b" : (Math.random() < 0.5 ? "#ff7b3b" : color) });
       }
       particles.push({ shock: true, x, y, r: 6, maxR: big ? 130 : 90, life: 0.4, age: 0 });
     }
@@ -570,6 +596,7 @@
         const gained = 10 + Math.floor(meteorRadius(target));
         score += gained; updateHUD();
         floaters.push({ x: p.x, y: p.y, text: "+" + gained, age: 0, life: 0.9 });
+        meteorCleared();
         if (target.nova) novaBlast(p.x, p.y);
         else if (target.heal) healLife(p.x, p.y);
         else if (target.special) splitMeteor(p.x, p.y, target.color);
@@ -579,8 +606,56 @@
       }
     }
 
+    // ---------- UFO ----------
+    function spaceSpot() { return { x: W * (0.15 + Math.random() * 0.7), y: H * (0.12 + Math.random() * 0.52) }; }
+    function spawnUfo() {
+      const s = spaceSpot();
+      ufo = { x: s.x, y: s.y, spawnX: s.x, spawnY: s.y, tx: s.x, ty: s.y, rx: 40, ry: 18, hp: 3, maxHp: 3, wpTimer: 0, fireCd: 3.4, charging: 0, hitFx: 0, alive: true, emerge: 0, scale: 0.12 };
+      sfx.ufoAppear();
+      showTip("🛸 Un UFO emerge dallo spazio! Colpiscilo!", 2600);
+    }
+    function updateUfo(dt) {
+      if (!ufo) {
+        if (state === STATE.PLAYING && level >= 2 && curUfo > 0) {
+          ufoCooldown -= dt;
+          if (ufoCooldown <= 0) { ufoCooldown = 14 + Math.random() * 10; if (Math.random() < curUfo) spawnUfo(); }
+        }
+        return;
+      }
+      if (ufo.emerge < 1) {
+        ufo.emerge = Math.min(1, ufo.emerge + dt / 0.85);
+        const e = 1 - (1 - ufo.emerge) * (1 - ufo.emerge);
+        ufo.scale = 0.12 + 0.88 * e;
+        ufo.x = ufo.spawnX; ufo.y = ufo.spawnY - 12 * ufo.emerge;
+        if (ufo.hitFx > 0) ufo.hitFx -= dt;
+        return;
+      }
+      ufo.scale = 1;
+      ufo.wpTimer -= dt;
+      if (ufo.wpTimer <= 0) { ufo.wpTimer = 0.9 + Math.random() * 1.4; ufo.tx = W * (0.12 + Math.random() * 0.76); ufo.ty = H * (0.10 + Math.random() * 0.45); }
+      ufo.x += (ufo.tx - ufo.x) * Math.min(1, dt * 1.8);
+      ufo.y += (ufo.ty - ufo.y) * Math.min(1, dt * 1.8);
+      ufo.y += Math.sin(elapsed * 3) * 0.4;
+      if (ufo.hitFx > 0) ufo.hitFx -= dt;
+      if (ufo.charging > 0) { ufo.charging -= dt; if (ufo.charging <= 0) { fireBolt(ufo.x, ufo.y); ufo.fireCd = 3.2 + Math.random() * 2; } }
+      else { ufo.fireCd -= dt; if (ufo.fireCd <= 0) ufo.charging = 0.9; }
+    }
+    function hitUfo() {
+      ufo.hp--; ufo.hitFx = 0.18; sfx.ufoTap();
+      if (ufo.hp <= 0) {
+        explode(ufo.x, ufo.y, "#b76bff", true); explode(ufo.x - 18, ufo.y + 6, "#ffcf3b", true);
+        sfx.ufoDead(); score += 120; updateHUD();
+        floaters.push({ x: ufo.x, y: ufo.y, text: "+120", age: 0, life: 1.1 });
+        ufo = null; ufoCooldown = 16 + Math.random() * 10;
+      } else {
+        floaters.push({ x: ufo.x, y: ufo.y - ufo.ry - 10, text: "colpito!", age: 0, life: 0.6, small: true });
+      }
+    }
+    function fireBolt(x, y) { sfx.ufoShoot(); bolts.push({ x, y, sx: x, sy: y, tx: W / 2, ty: H + 30, age: 0, life: 0.85 }); }
+
     // ---------- Danno / fine ----------
     function takeDamage() {
+      if (shield) { shield = false; sfx.shield(); showTip("Scudo assorbito! 🛡️", 1400); return; }
       lives--; updateHUD(); sfx.hit();
       flashEl.style.opacity = "0.55";
       setTimeout(() => { flashEl.style.opacity = "0"; }, 120);
@@ -590,54 +665,37 @@
     function gameOver() {
       state = STATE.OVER; sfx.over();
       finalScoreEl.textContent = score;
-      overSub.textContent = score >= 500 ? "Difensore leggendario! 🏆"
-        : score >= 200 ? "Ottima mira! 🎯" : "Ci sei quasi arrivato!";
+      overSub.textContent = "Sei arrivato al Livello " + level + ".";
       overScreen.classList.remove("hidden");
     }
 
     // ---------- Update ----------
     function update(dt) {
       elapsed += dt;
+      if (state === STATE.WARP) { updateWarp(dt); return; }
       updateSky(dt);
       if (state !== STATE.PLAYING) return;
 
-      waveTimer += dt;
-      if (waveTimer > 18) { waveTimer = 0; wave++; spawnInterval = Math.max(0.55, spawnInterval * 0.85); updateHUD(); }
-
       spawnTimer += dt;
-      if (spawnTimer >= spawnInterval) {
-        spawnTimer = 0; spawnMeteor();
-        if (wave >= 4 && Math.random() < 0.35) spawnMeteor();
-      }
+      if (spawnTimer >= spawnInterval) { spawnTimer = 0; spawnMeteor(); if (Math.random() < curDbl) spawnMeteor(); }
 
       for (const m of meteors) {
         if (!m.alive) continue;
         m.growth += m.speed * dt; m.rot += m.spin * dt;
-        if (m.growth >= 1) {
-          m.alive = false;
-          const p = meteorPos(m);
-          explode(p.x, p.y, "#ff3b52", true);
-          takeDamage();
-        }
+        if (m.growth >= 1) { m.alive = false; const p = meteorPos(m); explode(p.x, p.y, "#ff3b52", true); takeDamage(); }
       }
       updateShockwaves(dt);
       meteors = meteors.filter(m => m.alive);
 
       updateUfo(dt);
 
-      for (const b of bolts) {
-        b.age += dt;
-        if (b.age >= b.life) { explode(b.tx, clamp(b.ty, 0, H), "#ff3b52", false); takeDamage(); }
-      }
+      for (const b of bolts) { b.age += dt; if (b.age >= b.life) { explode(b.tx, clamp(b.ty, 0, H), "#ff3b52", false); takeDamage(); } }
       bolts = bolts.filter(b => b.age < b.life);
 
       for (const f of fragments) {
-        f.age += dt; f.rot += f.spin * dt;
-        f.x += f.vx * dt; f.y += f.vy * dt;
-        if (f.x < f.r) { f.x = f.r; f.vx = Math.abs(f.vx) * 0.92; }
-        else if (f.x > W - f.r) { f.x = W - f.r; f.vx = -Math.abs(f.vx) * 0.92; }
-        if (f.y < f.r) { f.y = f.r; f.vy = Math.abs(f.vy) * 0.92; }
-        else if (f.y > H - f.r) { f.y = H - f.r; f.vy = -Math.abs(f.vy) * 0.92; }
+        f.age += dt; f.rot += f.spin * dt; f.x += f.vx * dt; f.y += f.vy * dt;
+        if (f.x < f.r) { f.x = f.r; f.vx = Math.abs(f.vx) * 0.92; } else if (f.x > W - f.r) { f.x = W - f.r; f.vx = -Math.abs(f.vx) * 0.92; }
+        if (f.y < f.r) { f.y = f.r; f.vy = Math.abs(f.vy) * 0.92; } else if (f.y > H - f.r) { f.y = H - f.r; f.vy = -Math.abs(f.vy) * 0.92; }
       }
       fragments = fragments.filter(f => f.alive && f.age < f.life);
 
@@ -653,6 +711,8 @@
 
       for (const f of floaters) { f.age += dt; f.y -= 34 * dt; }
       floaters = floaters.filter(f => f.age < f.life);
+
+      if (state === STATE.PLAYING && cleared >= goal) enterWarp();
     }
 
     // ---------- Disegno ----------
@@ -670,14 +730,12 @@
         const s = r;
         const grad = ctx.createRadialGradient(-s * 0.25, -s * 0.3, s * 0.1, 0, 0, s * 1.3);
         grad.addColorStop(0, "#ffd6e1"); grad.addColorStop(0.5, m.color); grad.addColorStop(1, "#7a0020");
-        ctx.fillStyle = grad;
-        ctx.beginPath();
+        ctx.fillStyle = grad; ctx.beginPath();
         ctx.moveTo(0, s * 0.8);
         ctx.bezierCurveTo(-s * 1.15, s * 0.0, -s * 0.55, -s * 0.95, 0, -s * 0.3);
         ctx.bezierCurveTo(s * 0.55, -s * 0.95, s * 1.15, s * 0.0, 0, s * 0.8);
         ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = "rgba(255,220,230,0.9)"; ctx.lineWidth = 2;
-        ctx.shadowColor = "#ff5b7f"; ctx.shadowBlur = 12; ctx.stroke();
+        ctx.strokeStyle = "rgba(255,220,230,0.9)"; ctx.lineWidth = 2; ctx.shadowColor = "#ff5b7f"; ctx.shadowBlur = 12; ctx.stroke();
       } else {
         const body = ctx.createRadialGradient(-r * 0.35, -r * 0.35, r * 0.2, 0, 0, r);
         if (nv) { body.addColorStop(0, "#fff4d0"); body.addColorStop(0.5, m.color); body.addColorStop(1, "#7a4e00"); }
@@ -725,8 +783,7 @@
       glow.addColorStop(1, "rgba(183,107,255,0)");
       ctx.fillStyle = glow; ctx.beginPath(); ctx.arc(0, 0, u.rx * 1.8, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = charging ? "rgba(255,59,82,0.18)" : "rgba(120,220,255,0.12)";
-      ctx.beginPath(); ctx.moveTo(-u.rx * 0.5, u.ry * 0.4); ctx.lineTo(u.rx * 0.5, u.ry * 0.4);
-      ctx.lineTo(u.rx * 0.9, u.ry * 2.4); ctx.lineTo(-u.rx * 0.9, u.ry * 2.4); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-u.rx * 0.5, u.ry * 0.4); ctx.lineTo(u.rx * 0.5, u.ry * 0.4); ctx.lineTo(u.rx * 0.9, u.ry * 2.4); ctx.lineTo(-u.rx * 0.9, u.ry * 2.4); ctx.closePath(); ctx.fill();
       const body = ctx.createLinearGradient(0, -u.ry, 0, u.ry);
       body.addColorStop(0, "#e8ecf2"); body.addColorStop(0.5, "#9aa3b2"); body.addColorStop(1, "#4a5160");
       ctx.fillStyle = body; ctx.beginPath(); ctx.ellipse(0, 0, u.rx, u.ry, 0, 0, Math.PI * 2); ctx.fill();
@@ -748,8 +805,7 @@
     }
     function drawEmerge(u) {
       const t = u.emerge;
-      ctx.save();
-      ctx.globalAlpha = (1 - t) * 0.85;
+      ctx.save(); ctx.globalAlpha = (1 - t) * 0.85;
       const dg = ctx.createRadialGradient(u.spawnX, u.spawnY, 2, u.spawnX, u.spawnY, u.rx * 1.5);
       dg.addColorStop(0, "rgba(18,0,30,0.95)"); dg.addColorStop(1, "rgba(18,0,30,0)");
       ctx.fillStyle = dg; ctx.beginPath(); ctx.ellipse(u.spawnX, u.spawnY, u.rx * 1.5, u.ry * 1.6, 0, 0, Math.PI * 2); ctx.fill();
@@ -770,36 +826,28 @@
     }
 
     function render() {
+      if (state === STATE.WARP) { drawWarp(); return; }
       drawSky();
       meteors.slice().sort((a, b) => a.growth - b.growth).forEach(drawMeteor);
       if (ufo) { if (ufo.emerge < 1) drawEmerge(ufo); drawUfo(); }
       for (const b of bolts) drawBolt(b);
-
-      // onde d'urto della nova
       for (const sw of shockwaves) {
         const t = sw.age / sw.life;
         ctx.save();
-        ctx.strokeStyle = "rgba(255,210,60," + (1 - t) + ")";
-        ctx.lineWidth = 5 * (1 - t) + 1.5;
+        ctx.strokeStyle = "rgba(255,210,60," + (1 - t) + ")"; ctx.lineWidth = 5 * (1 - t) + 1.5;
         ctx.shadowColor = "#ffd23b"; ctx.shadowBlur = 20;
         ctx.beginPath(); ctx.arc(sw.x, sw.y, sw.r, 0, Math.PI * 2); ctx.stroke();
         ctx.restore();
       }
-
       for (const f of fragments) {
         const k = f.age > f.life - 0.8 ? clamp((f.life - f.age) / 0.8, 0, 1) : 1;
         ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.rot); ctx.globalAlpha = k;
         ctx.shadowColor = f.color; ctx.shadowBlur = 8; ctx.fillStyle = f.color;
         ctx.beginPath();
-        for (let i = 0; i < 5; i++) {
-          const a = i / 5 * 6.28, rr = f.r * (i % 2 ? 0.6 : 1);
-          const x = Math.cos(a) * rr, y = Math.sin(a) * rr;
-          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        }
+        for (let i = 0; i < 5; i++) { const a = i / 5 * 6.28, rr = f.r * (i % 2 ? 0.6 : 1); const x = Math.cos(a) * rr, y = Math.sin(a) * rr; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
         ctx.closePath(); ctx.fill();
         ctx.restore(); ctx.globalAlpha = 1;
       }
-
       for (const s of shots) {
         const t = s.age / s.life;
         const x = W / 2 + (s.tx - W / 2) * Math.min(1, t * 1.6);
@@ -810,7 +858,6 @@
         ctx.beginPath(); ctx.moveTo(W / 2, H + 20); ctx.lineTo(x, y); ctx.stroke();
         ctx.restore();
       }
-
       for (const pt of particles) {
         if (pt.shock) {
           const t = pt.age / pt.life;
@@ -823,7 +870,6 @@
         ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.r * (1 - t * 0.5), 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 1;
       }
-
       for (const f of floaters) {
         const t = f.age / f.life;
         ctx.save(); ctx.globalAlpha = 1 - t;
@@ -843,25 +889,21 @@
     }
 
     // ---------- Input ----------
-    canvas.addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      for (const t of e.changedTouches) tapAt(t.clientX, t.clientY);
-    }, { passive: false });
+    canvas.addEventListener("touchstart", (e) => { e.preventDefault(); for (const t of e.changedTouches) tapAt(t.clientX, t.clientY); }, { passive: false });
     canvas.addEventListener("mousedown", (e) => tapAt(e.clientX, e.clientY));
 
     // ---------- Avvio ----------
     function startGame() {
       initAudio();
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
-      reset();
       startScreen.classList.add("hidden");
       overScreen.classList.add("hidden");
-      state = STATE.PLAYING;
+      reset();
     }
     startBtn.addEventListener("click", startGame);
     restartBtn.addEventListener("click", () => {
       if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
-      reset(); overScreen.classList.add("hidden"); state = STATE.PLAYING;
+      overScreen.classList.add("hidden"); reset();
     });
 
     resize();
