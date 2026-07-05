@@ -25,6 +25,9 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
+        with:
+          # Abilita automaticamente GitHub Pages con sorgente "GitHub Actions"
+          enablement: true
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
